@@ -1,0 +1,60 @@
+import functools
+import json
+import os
+from urllib.request import urlopen
+
+from jose import jwk, jwt
+
+AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
+AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
+
+
+def _jwks():
+    if not AUTH0_DOMAIN:
+        raise RuntimeError("AUTH0_DOMAIN is not set")
+    with urlopen(f"https://{AUTH0_DOMAIN}/.well-known/jwks.json") as r:
+        return json.load(r)
+
+
+def verify_access_token(token: str) -> dict:
+    """Validate Auth0 RS256 access token and return claims."""
+    if not AUTH0_DOMAIN or not AUTH0_AUDIENCE:
+        raise RuntimeError("AUTH0_DOMAIN and AUTH0_AUDIENCE must be set")
+
+    jwks = _jwks()
+    unverified_header = jwt.get_unverified_header(token)
+    jwk_dict = None
+    for key in jwks["keys"]:
+        if key["kid"] == unverified_header.get("kid"):
+            jwk_dict = key
+            break
+    if not jwk_dict:
+        raise ValueError("Unable to find appropriate key")
+
+    public_key = jwk.construct(jwk_dict)
+    issuer = f"https://{AUTH0_DOMAIN}/"
+    return jwt.decode(
+        token,
+        public_key,
+        algorithms=["RS256"],
+        audience=AUTH0_AUDIENCE,
+        issuer=issuer,
+    )
+
+
+def require_auth(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        from flask import g, request
+
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return {"error": "missing_bearer_token"}, 401
+        token = auth[7:].strip()
+        try:
+            g.jwt_claims = verify_access_token(token)
+        except Exception as e:
+            return {"error": "invalid_token", "detail": str(e)}, 401
+        return f(*args, **kwargs)
+
+    return decorated
