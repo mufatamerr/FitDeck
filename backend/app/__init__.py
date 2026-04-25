@@ -1,5 +1,7 @@
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
 
@@ -14,8 +16,21 @@ from app.routes.admin import admin_bp
 
 
 def create_app():
+    # Load env even when the app is started without backend/run.py (e.g. some IDE / flask run setups).
+    # parent: .../backend/app → .../backend → repo root (folder that contains /backend)
+    _repo_root = Path(__file__).resolve().parent.parent.parent
+    _backend = Path(__file__).resolve().parent.parent
+    _repo_env = _repo_root / ".env"
+    _backend_env = _backend / ".env"
+    # override=True: shell-exported empty values won't block real keys from the file.
+    load_dotenv(_repo_env, override=True)
+    load_dotenv(_backend_env, override=True)
+
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "dev-change-me")
+    app.config["FITDECK_REPO_DOTENV"] = str(_repo_env)
+    app.config["FITDECK_REPO_DOTENV_EXISTS"] = _repo_env.is_file()
+    app.config["FITDECK_BACKEND_DOTENV_EXISTS"] = _backend_env.is_file()
 
     init_db(app)
 
@@ -42,5 +57,17 @@ def create_app():
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "fitdeck-api"}
+
+    @app.get("/health/bootstrap")
+    def health_bootstrap():
+        """Which .env paths exist (no secrets). Use when FitBot keys show missing in the UI."""
+        return {
+            "repo_dotenv_path": app.config.get("FITDECK_REPO_DOTENV"),
+            "repo_dotenv_exists": bool(app.config.get("FITDECK_REPO_DOTENV_EXISTS")),
+            "backend_dotenv_exists": bool(app.config.get("FITDECK_BACKEND_DOTENV_EXISTS")),
+            "fitbot_gemma_configured": bool(os.environ.get("GOOGLE_AI_STUDIO_API_KEY", "").strip()),
+            "fitbot_weather_configured": bool(os.environ.get("OPENWEATHER_API_KEY", "").strip()),
+            "fitbot_tts_configured": bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()),
+        }
 
     return app

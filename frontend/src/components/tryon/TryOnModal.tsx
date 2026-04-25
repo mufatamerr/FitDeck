@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { Results } from '@mediapipe/holistic'
 
+import { useUiStore } from '../../store/uiStore'
 import type { Outfit } from '../../types'
 import { AROverlay } from './AROverlay'
 import { CameraLayer } from './CameraLayer'
@@ -25,6 +26,13 @@ export function TryOnModal({
   onSaveOutfit,
   onSkipOutfit,
 }: Props) {
+  const setVoiceWakeBlocked = useUiStore((s) => s.setVoiceWakeBlocked)
+
+  useEffect(() => {
+    setVoiceWakeBlocked(true)
+    return () => setVoiceWakeBlocked(false)
+  }, [setVoiceWakeBlocked])
+
   const [video, setVideo] = useState<HTMLVideoElement | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [pose, setPose] = useState<Results['poseLandmarks']>(null)

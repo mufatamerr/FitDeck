@@ -10,3 +10,22 @@
     @apply min-h-dvh;
   }
 }
+
+@keyframes fitbot-bar {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@layer utilities {
+  .animate-fitbot-bar {
+    animation: fitbot-bar 0.85s ease-in-out infinite;
+    transform-origin: bottom;
+  }
+}

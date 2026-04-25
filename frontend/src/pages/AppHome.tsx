@@ -5,8 +5,6 @@ import { Link } from 'react-router-dom'
 import { ApiClient } from '../services/api'
 import { TryOnModal } from '../components/tryon/TryOnModal'
 import type { Outfit } from '../types'
-import { FitBotButton } from '../components/fitbot/FitBotButton'
-
 const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
 
 export function AppHome() {
@@ -161,6 +159,12 @@ export function AppHome() {
           >
             Admin Users →
           </Link>
+          <Link
+            to="/admin/catalog"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            Admin Catalog →
+          </Link>
           <button
             type="button"
             onClick={() => void runSync()}
@@ -219,7 +223,6 @@ export function AppHome() {
         />
       )}
 
-      <FitBotButton />
     </div>
   )
 }

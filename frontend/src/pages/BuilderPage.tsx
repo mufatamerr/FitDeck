@@ -2,7 +2,6 @@ import { useAuth0 } from '@auth0/auth0-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { FitBotButton } from '../components/fitbot/FitBotButton'
 import { TryOnModal } from '../components/tryon/TryOnModal'
 import { ApiClient } from '../services/api'
 import { useOutfitStore } from '../store/outfitStore'
@@ -264,8 +263,6 @@ export function BuilderPage() {
           </div>
         </div>
       </div>
-
-      <FitBotButton />
 
       {tryOnOpen && (
         <TryOnModal

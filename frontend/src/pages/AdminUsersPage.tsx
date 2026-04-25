@@ -51,6 +51,12 @@ export function AdminUsersPage() {
             </p>
           </div>
           <Link
+            to="/admin/catalog"
+            className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            Catalog
+          </Link>
+          <Link
             to="/app"
             className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
           >
