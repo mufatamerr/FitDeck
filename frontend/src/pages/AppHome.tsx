@@ -2,6 +2,11 @@ import { useAuth0 } from '@auth0/auth0-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ApiClient } from '../services/api'
+import { TryOnModal } from '../components/tryon/TryOnModal'
+import type { Outfit } from '../types'
+import { FitBotButton } from '../components/fitbot/FitBotButton'
+
 const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
 
 export function AppHome() {
@@ -9,33 +14,20 @@ export function AppHome() {
   const [sync, setSync] = useState<Record<string, unknown> | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [tryOnOpen, setTryOnOpen] = useState(false)
 
   const runSync = useCallback(async () => {
     setLoading(true)
     setSyncError(null)
     try {
       const audience = import.meta.env.VITE_AUTH0_AUDIENCE
-      const token = await getAccessTokenSilently({
-        authorizationParams: audience ? { audience } : undefined,
-      })
-      const res = await fetch(`${apiBase}/auth/sync`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setSync(null)
-        setSyncError(
-          typeof data.detail === 'string'
-            ? data.detail
-            : data.error || `HTTP ${res.status}`,
-        )
-        return
-      }
-      setSync(data as Record<string, unknown>)
+      const api = new ApiClient(apiBase, getAccessTokenSilently)
+      const data = await api.fetchJson<Record<string, unknown>>(
+        '/auth/sync',
+        { method: 'POST' },
+        audience,
+      )
+      setSync(data)
     } catch (e) {
       setSync(null)
       setSyncError(e instanceof Error ? e.message : 'Sync failed')
@@ -47,6 +39,56 @@ export function AppHome() {
   useEffect(() => {
     void runSync()
   }, [runSync])
+
+  const demoQueue: Outfit[] = [
+    {
+      id: 'demo-1',
+      name: 'Demo outfit 1',
+      items: [
+        {
+          id: 'shirt-1',
+          name: 'Demo shirt',
+          brand: 'FitDeck',
+          category: 'shirt',
+          try_on_asset: 'https://dummyimage.com/600x600/7c3aed/ffffff.png&text=SHIRT',
+        },
+        {
+          id: 'pants-1',
+          name: 'Demo pants',
+          brand: 'FitDeck',
+          category: 'pants',
+          try_on_asset: 'https://dummyimage.com/600x600/111827/ffffff.png&text=PANTS',
+        },
+      ],
+    },
+    {
+      id: 'demo-2',
+      name: 'Demo outfit 2',
+      items: [
+        {
+          id: 'jacket-1',
+          name: 'Demo jacket',
+          brand: 'FitDeck',
+          category: 'jacket',
+          try_on_asset: 'https://dummyimage.com/600x600/0ea5e9/ffffff.png&text=JACKET',
+        },
+        {
+          id: 'pants-2',
+          name: 'Demo pants',
+          brand: 'FitDeck',
+          category: 'pants',
+          try_on_asset: 'https://dummyimage.com/600x600/111827/ffffff.png&text=PANTS',
+        },
+        {
+          id: 'shoes-1',
+          name: 'Demo shoes',
+          brand: 'FitDeck',
+          category: 'shoes',
+          try_on_asset: 'https://dummyimage.com/600x600/f59e0b/111827.png&text=SHOES',
+        },
+      ],
+    },
+  ]
 
   return (
     <div className="min-h-dvh px-6 py-12">
@@ -84,6 +126,31 @@ export function AppHome() {
         <div className="mt-8 flex flex-wrap gap-3">
           <button
             type="button"
+            onClick={() => setTryOnOpen(true)}
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+          >
+            Open Try-On (demo)
+          </button>
+          <Link
+            to="/app/discover"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            Discover →
+          </Link>
+          <Link
+            to="/app/wardrobe"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            My Wardrobe →
+          </Link>
+          <Link
+            to="/admin/users"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            Admin Users →
+          </Link>
+          <button
+            type="button"
             onClick={() => void runSync()}
             className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white hover:bg-white/5"
           >
@@ -106,6 +173,41 @@ export function AppHome() {
           </Link>
         </div>
       </div>
+
+      {tryOnOpen && (
+        <TryOnModal
+          outfitQueue={demoQueue}
+          onClose={() => setTryOnOpen(false)}
+          onSaveOutfit={async () => {
+            const audience = import.meta.env.VITE_AUTH0_AUDIENCE
+            const api = new ApiClient(apiBase, getAccessTokenSilently)
+            const outfitId = await api.fetchJson<{ outfit_id: string }>(
+              '/outfits',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: 'Saved from Try-On',
+                  item_ids: [],
+                }),
+              },
+              audience,
+            )
+
+            await api.fetchJson<{ ok: boolean }>(
+              '/swipe',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ outfit_id: outfitId.outfit_id, direction: 'right' }),
+              },
+              audience,
+            )
+          }}
+        />
+      )}
+
+      <FitBotButton />
     </div>
   )
 }

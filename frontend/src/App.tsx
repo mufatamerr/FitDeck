@@ -3,7 +3,11 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppHome } from './pages/AppHome'
 import { CallbackPage } from './pages/CallbackPage'
+import { DiscoverPage } from './pages/DiscoverPage'
 import { LandingPage } from './pages/LandingPage'
+import { WardrobeAddPage } from './pages/WardrobeAddPage'
+import { WardrobePage } from './pages/WardrobePage'
+import { AdminUsersPage } from './pages/AdminUsersPage'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth0()
@@ -31,6 +35,38 @@ export default function App() {
         element={
           <ProtectedRoute>
             <AppHome />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/discover"
+        element={
+          <ProtectedRoute>
+            <DiscoverPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/wardrobe"
+        element={
+          <ProtectedRoute>
+            <WardrobePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/wardrobe/add"
+        element={
+          <ProtectedRoute>
+            <WardrobeAddPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute>
+            <AdminUsersPage />
           </ProtectedRoute>
         }
       />

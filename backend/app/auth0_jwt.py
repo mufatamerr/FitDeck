@@ -58,3 +58,19 @@ def require_auth(f):
         return f(*args, **kwargs)
 
     return decorated
+
+
+def require_role(role: str):
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapped(*args, **kwargs):
+            from flask import g
+
+            claims = getattr(g, "jwt_claims", {}) or {}
+            if claims.get("role") != role:
+                return {"error": "forbidden"}, 403
+            return f(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
