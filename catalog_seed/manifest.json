@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "brand": "FitDeck",
+      "name": "FitDeck Dri-FIT Tee",
+      "category": "shirt",
+      "source_url": null,
+      "image_url": "https://dummyimage.com/1200x1200/7c3aed/ffffff.png&text=SHIRT",
+      "try_on_asset_url": "https://dummyimage.com/1200x1200/7c3aed/ffffff.png&text=SHIRT",
+      "style_tags": ["athletic"],
+      "color_tags": ["violet"]
+    },
+    {
+      "brand": "FitDeck",
+      "name": "FitDeck Track Pants",
+      "category": "pants",
+      "source_url": null,
+      "image_url": "https://dummyimage.com/1200x1200/111827/ffffff.png&text=PANTS",
+      "try_on_asset_url": "https://dummyimage.com/1200x1200/111827/ffffff.png&text=PANTS",
+      "style_tags": ["streetwear"],
+      "color_tags": ["black"]
+    }
+  ]
+}
+

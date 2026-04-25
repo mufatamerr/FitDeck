@@ -2,6 +2,8 @@ import { useAuth0 } from '@auth0/auth0-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
+import { removeBackground } from '@imgly/background-removal'
+
 const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
 
 export function WardrobeAddPage() {
@@ -9,12 +11,31 @@ export function WardrobeAddPage() {
   const nav = useNavigate()
 
   const [file, setFile] = useState<File | null>(null)
+  const [tryOnAsset, setTryOnAsset] = useState<Blob | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [brand, setBrand] = useState('')
   const [category, setCategory] = useState('shirt')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
+
+  const onPick = async (picked: File | null) => {
+    setFile(picked)
+    setTryOnAsset(null)
+    setPreviewUrl(null)
+    if (!picked) return
+    // Generate transparent PNG in-browser (no API key).
+    try {
+      const blob = await removeBackground(picked)
+      setTryOnAsset(blob)
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+    } catch (e) {
+      // fall back to normal upload if background removal fails
+      setErr(e instanceof Error ? e.message : 'Background removal failed')
+    }
+  }
 
   const upload = async () => {
     if (!file) return
@@ -28,6 +49,9 @@ export function WardrobeAddPage() {
       )
       const form = new FormData()
       form.append('image', file)
+      if (tryOnAsset) {
+        form.append('try_on_asset', new File([tryOnAsset], 'tryon.png', { type: 'image/png' }))
+      }
       if (name) form.append('name', name)
       if (brand) form.append('brand', brand)
       if (category) form.append('category', category)
@@ -70,8 +94,14 @@ export function WardrobeAddPage() {
             type="file"
             accept="image/*"
             className="mt-2 block w-full text-sm text-zinc-300 file:mr-4 file:rounded-lg file:border-0 file:bg-violet-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-violet-500"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
           />
+
+          {previewUrl && (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(45deg,rgba(255,255,255,0.08)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.08)_50%,rgba(255,255,255,0.08)_75%,transparent_75%,transparent)] bg-[length:24px_24px]">
+              <img src={previewUrl} alt="try-on asset preview" className="w-full" />
+            </div>
+          )}
 
           <div className="mt-6 grid grid-cols-1 gap-4">
             <div>
@@ -121,7 +151,7 @@ export function WardrobeAddPage() {
             disabled={!file || loading}
             className="mt-6 w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {loading ? 'Uploading…' : 'Upload'}
+            {loading ? 'Uploading…' : tryOnAsset ? 'Upload (with try-on asset)' : 'Upload'}
           </button>
         </div>
       </div>

@@ -8,6 +8,8 @@ import { LandingPage } from './pages/LandingPage'
 import { WardrobeAddPage } from './pages/WardrobeAddPage'
 import { WardrobePage } from './pages/WardrobePage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
+import { BuilderPage } from './pages/BuilderPage'
+import { ClosetPage } from './pages/ClosetPage'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth0()
@@ -43,6 +45,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DiscoverPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/builder"
+        element={
+          <ProtectedRoute>
+            <BuilderPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/closet"
+        element={
+          <ProtectedRoute>
+            <ClosetPage />
           </ProtectedRoute>
         }
       />

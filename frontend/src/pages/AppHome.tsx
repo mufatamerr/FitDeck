@@ -138,6 +138,18 @@ export function AppHome() {
             Discover →
           </Link>
           <Link
+            to="/app/builder"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            Builder →
+          </Link>
+          <Link
+            to="/app/closet"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            Closet →
+          </Link>
+          <Link
             to="/app/wardrobe"
             className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
           >

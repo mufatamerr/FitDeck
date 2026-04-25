@@ -19,10 +19,16 @@ def create_app():
 
     init_db(app)
 
-    origins = [
-        os.environ.get("FRONTEND_URL", "http://localhost:5173"),
-        "http://127.0.0.1:5173",
-    ]
+    # Allow both 5173 and 5174 for local dev (Vite may auto-bump ports).
+    origins = list(
+        {
+            os.environ.get("FRONTEND_URL", "http://localhost:5173"),
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
+        }
+    )
     CORS(app, resources={r"/*": {"origins": origins}}, supports_credentials=True)
 
     app.register_blueprint(auth_bp, url_prefix="/auth")

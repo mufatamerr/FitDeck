@@ -76,7 +76,11 @@ export function WardrobePage() {
                 key={i.id}
                 className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur"
               >
-                <div className="aspect-square w-full bg-black/20" />
+                <div className="aspect-square w-full bg-black/20">
+                  {i.image_url ? (
+                    <img src={i.image_url} alt={i.name} className="h-full w-full object-cover" />
+                  ) : null}
+                </div>
                 <div className="p-4">
                   <p className="text-xs text-zinc-500">{i.brand || '—'}</p>
                   <p className="mt-1 text-sm font-medium text-white">{i.name}</p>

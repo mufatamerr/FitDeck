@@ -1,14 +1,33 @@
 import os
 import uuid
+from pathlib import Path
 
 import requests
-from flask import Blueprint, g, request
+from flask import Blueprint, g, request, send_from_directory
 
 from app.auth0_jwt import require_auth
 from app.db import db
 from app.models.clothing_item import ClothingItem
 
 wardrobe_bp = Blueprint("wardrobe", __name__)
+
+UPLOADS_DIR = Path(__file__).resolve().parents[2] / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _infer_category(labels: list[str]) -> str | None:
+    s = " ".join(labels).lower()
+    if any(k in s for k in ["shoe", "sneaker", "boot", "trainer", "heel"]):
+        return "shoes"
+    if any(k in s for k in ["pants", "trousers", "jean", "jeans", "denim", "leggings", "shorts"]):
+        return "pants"
+    if any(k in s for k in ["jacket", "coat", "hoodie", "sweater", "blazer", "outerwear"]):
+        return "jacket"
+    if any(k in s for k in ["shirt", "t-shirt", "tshirt", "top", "blouse", "polo"]):
+        return "shirt"
+    if any(k in s for k in ["bag", "cap", "hat", "belt", "accessory", "watch"]):
+        return "accessory"
+    return None
 
 
 def _vision_annotate(image_bytes: bytes):
@@ -62,6 +81,11 @@ def list_wardrobe():
     }
 
 
+@wardrobe_bp.get("/media/<path:filename>")
+def media(filename: str):
+    return send_from_directory(UPLOADS_DIR, filename)
+
+
 @wardrobe_bp.post("/upload")
 @require_auth
 def upload():
@@ -73,8 +97,6 @@ def upload():
     image_bytes = f.read()
     vision, vision_err = _vision_annotate(image_bytes)
 
-    # MVP: store raw upload only; use data URLs later or Cloudinary
-    # For now we do not persist bytes; we just create an item with tags and no image_url.
     labels = []
     colors = []
     if vision and "responses" in vision and vision["responses"]:
@@ -88,16 +110,38 @@ def upload():
             rgb = (c.get("color") or {})
             colors.append(f"rgb({rgb.get('red',0)},{rgb.get('green',0)},{rgb.get('blue',0)})")
 
+    inferred_category = _infer_category(labels)
+    category = request.form.get("category") or inferred_category or "shirt"
+
+    # Store the uploaded image to disk so it can render in UI and be used in Builder.
+    ext = Path(f.filename or "").suffix.lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".webp"]:
+        ext = ".jpg"
+    file_id = uuid.uuid4().hex
+    filename = f"{file_id}{ext}"
+    (UPLOADS_DIR / filename).write_bytes(image_bytes)
+    base = request.host_url.rstrip("/")
+    image_url = f"{base}/wardrobe/media/{filename}"
+
+    # Optional: transparent PNG from client-side background removal
+    try_on_asset_url = image_url
+    if "try_on_asset" in request.files:
+        a = request.files["try_on_asset"]
+        asset_bytes = a.read()
+        asset_name = f"{file_id}.tryon.png"
+        (UPLOADS_DIR / asset_name).write_bytes(asset_bytes)
+        try_on_asset_url = f"{base}/wardrobe/media/{asset_name}"
+
     item = ClothingItem(
         id=uuid.uuid4().hex,
         name=request.form.get("name") or "My item",
         brand=request.form.get("brand"),
-        category=request.form.get("category") or "shirt",
+        category=category,
         style_tags=labels[:5],
         color_tags=colors[:3],
         vision_labels=vision,
-        image_url=None,
-        try_on_asset=None,
+        image_url=image_url,
+        try_on_asset=try_on_asset_url,
         source="personal",
         owner_id=owner_id,
         trending_score=0,
@@ -112,9 +156,12 @@ def upload():
             "name": item.name,
             "brand": item.brand,
             "category": item.category,
+            "image_url": item.image_url,
+            "try_on_asset": item.try_on_asset,
             "style_tags": item.style_tags or [],
             "color_tags": item.color_tags or [],
         },
         "vision_error": vision_err,
+        "inferred_category": inferred_category,
     }
 
