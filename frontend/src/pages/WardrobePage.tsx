@@ -26,6 +26,19 @@ export function WardrobePage() {
   const [err, setErr]         = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter]   = useState<string>('all')
+  const [deleting, setDeleting] = useState<Set<string>>(new Set())
+
+  const deleteItem = async (id: string) => {
+    setDeleting(prev => new Set(prev).add(id))
+    try {
+      await api.fetchJson<{ ok: boolean }>(`/wardrobe/${id}`, { method: 'DELETE' }, audience)
+      setItems(prev => prev.filter(i => i.id !== id))
+    } catch {
+      // silently keep the card if delete fails
+    } finally {
+      setDeleting(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
 
   const refresh = async () => {
     setLoading(true)
@@ -131,33 +144,55 @@ export function WardrobePage() {
           {/* GRID */}
           {!loading && !err && visible.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 1 }}>
-              {visible.map(item => (
-                <div
-                  key={item.id}
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'default', transition: 'border-color 0.2s' }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)')}
-                >
-                  {/* IMAGE */}
-                  <div style={{ aspectRatio: '3/4', background: 'rgba(0,0,0,0.3)', overflow: 'hidden', position: 'relative' }}>
-                    {item.image_url
-                      ? <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(0.2) contrast(1.04)' }} />
-                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ fontSize: 9, letterSpacing: '0.2em', color: '#666' }}>NO IMAGE</span>
-                        </div>
-                    }
-                    <span style={{ position: 'absolute', top: 10, left: 10, fontSize: 8, letterSpacing: '0.18em', color: 'rgba(237,233,227,0.5)', background: 'rgba(0,0,0,0.55)', padding: '3px 8px' }}>
-                      {CATEGORY_EMOJI[item.category] ?? item.category.toUpperCase()}
-                    </span>
-                  </div>
+              {visible.map(item => {
+                const isDeleting = deleting.has(item.id)
+                return (
+                  <div
+                    key={item.id}
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'default', transition: 'border-color 0.2s, opacity 0.2s', opacity: isDeleting ? 0.4 : 1 }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)')}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)')}
+                  >
+                    {/* IMAGE */}
+                    <div style={{ aspectRatio: '3/4', background: 'rgba(0,0,0,0.3)', overflow: 'hidden', position: 'relative' }}>
+                      {item.image_url
+                        ? <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(0.2) contrast(1.04)' }} />
+                        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ fontSize: 9, letterSpacing: '0.2em', color: '#666' }}>NO IMAGE</span>
+                          </div>
+                      }
+                      <span style={{ position: 'absolute', top: 10, left: 10, fontSize: 8, letterSpacing: '0.18em', color: 'rgba(237,233,227,0.5)', background: 'rgba(0,0,0,0.55)', padding: '3px 8px' }}>
+                        {CATEGORY_EMOJI[item.category] ?? item.category.toUpperCase()}
+                      </span>
+                    </div>
 
-                  {/* META */}
-                  <div style={{ padding: '16px 18px' }}>
-                    {item.brand && <p style={{ fontSize: 9, letterSpacing: '0.18em', color: muted, marginBottom: 6 }}>{item.brand.toUpperCase()}</p>}
-                    <p style={{ fontSize: 13, color: fg, fontWeight: 300, lineHeight: 1.4 }}>{item.name}</p>
+                    {/* META */}
+                    <div style={{ padding: '16px 18px 12px' }}>
+                      {item.brand && <p style={{ fontSize: 9, letterSpacing: '0.18em', color: muted, marginBottom: 6 }}>{item.brand.toUpperCase()}</p>}
+                      <p style={{ fontSize: 13, color: fg, fontWeight: 300, lineHeight: 1.4, marginBottom: 14 }}>{item.name}</p>
+                      <button
+                        onClick={() => void deleteItem(item.id)}
+                        disabled={isDeleting}
+                        style={{
+                          width: '100%',
+                          background: 'transparent',
+                          border: '1px solid rgba(239,68,68,0.22)',
+                          color: '#f87171',
+                          padding: '8px 0',
+                          fontSize: 9,
+                          letterSpacing: '0.18em',
+                          fontFamily: "'DM Sans',sans-serif",
+                          cursor: isDeleting ? 'not-allowed' : 'pointer',
+                          opacity: isDeleting ? 0.5 : 1,
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {isDeleting ? '…' : 'REMOVE'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

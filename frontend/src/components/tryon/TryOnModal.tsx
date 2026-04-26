@@ -1,5 +1,6 @@
 import { useAuth0 } from '@auth0/auth0-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { useUiStore } from '../../store/uiStore'
 import { ApiClient } from '../../services/api'
@@ -61,6 +62,7 @@ export function TryOnModal({
   onSaveOutfit,
   onSkipOutfit,
 }: Props) {
+  const navigate = useNavigate()
   const setVoiceWakeBlocked = useUiStore((s) => s.setVoiceWakeBlocked)
   const { getAccessTokenSilently } = useAuth0()
   const api = useMemo(
@@ -74,8 +76,9 @@ export function TryOnModal({
   }, [setVoiceWakeBlocked])
 
   // ── Webcam + skeleton overlay ────────────────────────────────────────────
-  const videoRef    = useRef<HTMLVideoElement>(null)
-  const skeletonRef = useRef<HTMLCanvasElement>(null)
+  const videoRef       = useRef<HTMLVideoElement>(null)
+  const skeletonRef    = useRef<HTMLCanvasElement>(null)
+  const skeletonPipRef = useRef<HTMLCanvasElement>(null)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
 
@@ -196,16 +199,15 @@ export function TryOnModal({
     if (!outfit || saving) return
     setSaving(true)
     try { await onSaveOutfit(outfit) } finally { setSaving(false) }
-    setResultUrl(null)
-    setAppState('camera')
-  }, [onSaveOutfit, outfit, saving])
+    onClose()
+    navigate('/app/closet')
+  }, [onSaveOutfit, outfit, saving, onClose, navigate])
 
   const handleDiscard = useCallback(() => {
     if (outfit) onSkipOutfit?.(outfit)
-    setResultUrl(null)
-    setAppState('camera')
-    setIdx((i) => Math.min(i + 1, outfitQueue.length - 1))
-  }, [onSkipOutfit, outfit, outfitQueue.length])
+    onClose()
+    navigate('/app/builder')
+  }, [onSkipOutfit, outfit, onClose, navigate])
 
   const handleRetake = useCallback(() => {
     setResultUrl(null)
@@ -220,45 +222,60 @@ export function TryOnModal({
     mirrorX: true,
   })
 
+  const drawSkeleton = useCallback(
+    (ctx: CanvasRenderingContext2D, lms: { x: number; y: number; z: number }[], W: number, H: number) => {
+      const CONN: [number, number][] = [
+        [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+        [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
+        [13,17],[17,18],[18,19],[19,20],[0,17],
+      ]
+      const TIPS = new Set([0, 4, 8, 12, 16, 20])
+      ctx.strokeStyle = '#8b5cf6'
+      ctx.lineWidth = W < 200 ? 1.5 : 3
+      for (const [a, b] of CONN) {
+        ctx.beginPath()
+        ctx.moveTo(lms[a].x * W, lms[a].y * H)
+        ctx.lineTo(lms[b].x * W, lms[b].y * H)
+        ctx.stroke()
+      }
+      for (let i = 0; i < lms.length; i++) {
+        const r = W < 200 ? (i === 0 ? 3 : TIPS.has(i) ? 2 : 1.5) : (i === 0 ? 7 : TIPS.has(i) ? 5 : 3)
+        ctx.beginPath()
+        ctx.arc(lms[i].x * W, lms[i].y * H, r, 0, Math.PI * 2)
+        ctx.fillStyle = i === 0 ? '#22c55e' : TIPS.has(i) ? '#f59e0b' : '#e5e7eb'
+        ctx.fill()
+      }
+    },
+    [],
+  )
+
   const handleLandmarks = useCallback((lms: { x: number; y: number; z: number }[] | null) => {
     ingest(lms)
 
+    // Full-screen skeleton during camera state
     const canvas = skeletonRef.current
-    if (!canvas) return
-
-    // Size canvas to CSS layout so normalized coords map to visible pixels
-    if (canvas.width !== canvas.offsetWidth)   canvas.width  = canvas.offsetWidth
-    if (canvas.height !== canvas.offsetHeight) canvas.height = canvas.offsetHeight
-
-    const ctx = canvas.getContext('2d')!
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    if (!lms || appStateRef.current !== 'camera') return
-
-    const W = canvas.width
-    const H = canvas.height
-    const CONN: [number, number][] = [
-      [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
-      [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
-      [13,17],[17,18],[18,19],[19,20],[0,17],
-    ]
-    const TIPS = new Set([0, 4, 8, 12, 16, 20])
-
-    ctx.strokeStyle = '#8b5cf6'
-    ctx.lineWidth = 3
-    for (const [a, b] of CONN) {
-      ctx.beginPath()
-      ctx.moveTo(lms[a].x * W, lms[a].y * H)
-      ctx.lineTo(lms[b].x * W, lms[b].y * H)
-      ctx.stroke()
+    if (canvas) {
+      if (canvas.width !== canvas.offsetWidth)   canvas.width  = canvas.offsetWidth
+      if (canvas.height !== canvas.offsetHeight) canvas.height = canvas.offsetHeight
+      const ctx = canvas.getContext('2d')!
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      if (lms && appStateRef.current === 'camera') {
+        drawSkeleton(ctx, lms, canvas.width, canvas.height)
+      }
     }
-    for (let i = 0; i < lms.length; i++) {
-      ctx.beginPath()
-      ctx.arc(lms[i].x * W, lms[i].y * H, i === 0 ? 7 : TIPS.has(i) ? 5 : 3, 0, Math.PI * 2)
-      ctx.fillStyle = i === 0 ? '#22c55e' : TIPS.has(i) ? '#f59e0b' : '#e5e7eb'
-      ctx.fill()
+
+    // PiP skeleton during result state
+    const pip = skeletonPipRef.current
+    if (pip) {
+      pip.width  = pip.offsetWidth  || 120
+      pip.height = pip.offsetHeight || 160
+      const ctx2 = pip.getContext('2d')!
+      ctx2.clearRect(0, 0, pip.width, pip.height)
+      if (lms && appStateRef.current === 'result') {
+        drawSkeleton(ctx2, lms, pip.width, pip.height)
+      }
     }
-  }, [ingest])
+  }, [ingest, drawSkeleton])
 
   useHands(videoRef, handleLandmarks)
 
@@ -277,7 +294,7 @@ export function TryOnModal({
             ? 'absolute right-4 top-4 z-30 rounded-2xl border-2 border-white/20 object-cover shadow-xl'
             : 'hidden'
         }
-        style={appState === 'result' ? { width: 120, height: 160 } : undefined}
+        style={appState === 'result' ? { width: 144, height: 192 } : undefined}
       />
 
       {cameraError && (
@@ -289,12 +306,21 @@ export function TryOnModal({
         </div>
       )}
 
-      {/* Skeleton overlay — only during camera state */}
+      {/* Skeleton overlay — full-screen during camera state */}
       {appState === 'camera' && (
         <canvas
           ref={skeletonRef}
           className="absolute inset-0 z-10 h-full w-full"
           style={{ pointerEvents: 'none' }}
+        />
+      )}
+
+      {/* PiP skeleton overlay — sits on top of the PiP webcam during result state */}
+      {appState === 'result' && (
+        <canvas
+          ref={skeletonPipRef}
+          className="absolute z-40 rounded-2xl"
+          style={{ right: 16, top: 16, width: 144, height: 192, pointerEvents: 'none' }}
         />
       )}
 
@@ -327,7 +353,7 @@ export function TryOnModal({
       )}
 
       {saving && (
-        <div className="absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-full bg-violet-600/90 px-4 py-2 text-xs text-white">
+        <div className="absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-600/90 px-6 py-3 text-sm font-medium text-white shadow-lg backdrop-blur">
           Saving…
         </div>
       )}
@@ -336,7 +362,7 @@ export function TryOnModal({
         type="button"
         onClick={onClose}
         className="absolute right-4 top-4 z-40 rounded-full bg-black/50 p-2 text-zinc-200 backdrop-blur hover:bg-black/70"
-        style={appState === 'result' ? { top: 176 } : undefined}
+        style={appState === 'result' ? { top: 208 } : undefined}
         aria-label="Close"
       >
         ✕
