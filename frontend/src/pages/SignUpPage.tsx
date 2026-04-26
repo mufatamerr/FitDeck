@@ -6,11 +6,18 @@ import { useFitAuth } from '../auth/FitAuth'
 
 export function SignUpPage() {
   const { isAuthenticated, isConfigured, isLoading, loginWithRedirect } = useFitAuth()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
 
   if (isConfigured && isAuthenticated) return <Navigate to="/app" replace />
 
+  const savePending = () => {
+    if (username.trim()) localStorage.setItem('fitdeck_pending_username', username.trim())
+  }
+
   const goEmail = async () => {
+    savePending()
     await loginWithRedirect({
       appState: { returnTo: '/app' },
       authorizationParams: { screen_hint: 'signup', login_hint: email || undefined },
@@ -18,6 +25,7 @@ export function SignUpPage() {
   }
 
   const goGoogle = async () => {
+    savePending()
     await loginWithRedirect({
       appState: { returnTo: '/app' },
       authorizationParams: { connection: 'google-oauth2', screen_hint: 'signup', login_hint: email || undefined },
@@ -28,7 +36,7 @@ export function SignUpPage() {
   const fg  = '#ede9e3'
 
   return (
-    <div style={{ width: '100%', height: '100%', background: bg, display: 'flex', flexDirection: 'column', position: 'relative', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ width: '100%', minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', position: 'relative', fontFamily: "'DM Sans',sans-serif" }}>
       <DottedSurface className="opacity-80" />
       <nav style={{ padding: '26px 44px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 2 }}>
         <Link to="/" style={{ fontSize: 13, letterSpacing: '0.22em', color: fg, fontFamily: 'inherit', fontWeight: 500 }}>
@@ -47,11 +55,27 @@ export function SignUpPage() {
             </h2>
 
             <input
+              type="text"
+              placeholder="USERNAME"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              className="input-underline"
+            />
+            <input
               type="email"
               placeholder="YOUR EMAIL"
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="input-underline"
+              style={{ marginTop: 20 }}
+            />
+            <input
+              type="password"
+              placeholder="PASSWORD"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="input-underline"
+              style={{ marginTop: 20 }}
             />
 
             <button

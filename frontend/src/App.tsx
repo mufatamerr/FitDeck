@@ -14,6 +14,8 @@ import { AdminUsersPage } from './pages/AdminUsersPage'
 import { AdminCatalogPage } from './pages/AdminCatalogPage'
 import { BuilderPage } from './pages/BuilderPage'
 import { ClosetPage } from './pages/ClosetPage'
+import { AdminLoginPage } from './pages/AdminLoginPage'
+import { AdminDashboard } from './pages/AdminDashboard'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isConfigured, isLoading } = useFitAuth()
@@ -50,6 +52,8 @@ export default function App() {
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/signin" element={<SignInPage />} />
       <Route path="/callback" element={<CallbackPage />} />
+      <Route path="/admin-login" element={<AdminLoginPage />} />
+      <Route path="/admin-dashboard" element={<AdminDashboard />} />
       <Route
         element={
           <ProtectedRoute>

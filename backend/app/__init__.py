@@ -13,6 +13,7 @@ from app.routes.swipe import swipe_bp
 from app.routes.wardrobe import wardrobe_bp
 from app.routes.fitbot import fitbot_bp
 from app.routes.admin import admin_bp
+from app.routes.admin_dev import admin_dev_bp
 
 
 def create_app():
@@ -53,6 +54,7 @@ def create_app():
     app.register_blueprint(wardrobe_bp, url_prefix="/wardrobe")
     app.register_blueprint(fitbot_bp, url_prefix="/fitbot")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(admin_dev_bp, url_prefix="/dev-admin")
 
     @app.get("/health")
     def health():
