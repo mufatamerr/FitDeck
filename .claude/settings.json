@@ -3,7 +3,10 @@
     "allow": [
       "Bash(npx tsc *)",
       "WebFetch(domain:docs.fashn.ai)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git merge *)"
     ]
   }
 }

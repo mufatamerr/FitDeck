@@ -3,6 +3,7 @@ import sys
 import json
 import os
 import uuid
+import re
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -16,7 +17,10 @@ import cloudinary  # noqa: E402
 import cloudinary.uploader  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "catalog_seed" / "manifest.json"
+LOCAL_CATALOG_DIR = BACKEND_ROOT / "uploads" / "catalog"
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://127.0.0.1:5000")
 
 
 def _cloudinary_configured() -> bool:
@@ -37,9 +41,40 @@ def _configure_cloudinary():
 
 
 def _download_bytes(url: str) -> bytes:
-    r = requests.get(url, timeout=30)
+    r = requests.get(url, timeout=30, headers={"User-Agent": "FitDeck/1.0"})
     r.raise_for_status()
     return r.content
+
+
+def _removebg(image_bytes: bytes, bg_color: str = "ffffff") -> bytes | None:
+    """Remove background via remove.bg. Returns processed image bytes or None on failure."""
+    api_key = os.environ.get("REMOVEBG_API_KEY", "").strip()
+    if not api_key:
+        return None
+    try:
+        resp = requests.post(
+            "https://api.remove.bg/v1.0/removebg",
+            headers={"X-Api-Key": api_key},
+            files={"image_file": ("image.jpg", image_bytes, "image/jpeg")},
+            data={"size": "regular", "bg_color": bg_color, "format": "png"},
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            return resp.content
+        print(f"  remove.bg warning: {resp.status_code} {resp.text[:120]}")
+    except Exception as exc:
+        print(f"  remove.bg error: {exc}")
+    return None
+
+
+def _slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def _save_local(file_bytes: bytes, filename: str) -> str:
+    LOCAL_CATALOG_DIR.mkdir(parents=True, exist_ok=True)
+    (LOCAL_CATALOG_DIR / filename).write_bytes(file_bytes)
+    return f"{API_BASE_URL}/uploads/catalog/{filename}"
 
 
 def _upload_bytes_to_cloudinary(
@@ -62,6 +97,34 @@ def _upload_bytes_to_cloudinary(
     return res["secure_url"]
 
 
+def _process_image(source_url: str, slug: str) -> str:
+    """
+    Download source image, run through remove.bg (white bg),
+    upload to Cloudinary if configured, else save locally.
+    Returns the final URL to use in the DB.
+    """
+    try:
+        img_bytes = _download_bytes(source_url)
+    except Exception as exc:
+        print(f"  Download failed: {exc}")
+        return source_url
+
+    # Apply remove.bg for a clean white background
+    processed = _removebg(img_bytes, bg_color="ffffff")
+    final_bytes = processed if processed is not None else img_bytes
+    ext = "png" if processed is not None else "jpg"
+    filename = f"{slug}.{ext}"
+
+    if _cloudinary_configured():
+        try:
+            return _upload_bytes_to_cloudinary(file_bytes=final_bytes, public_id=slug)
+        except Exception as exc:
+            print(f"  Cloudinary upload failed: {exc}")
+
+    # Fall back to local file serving
+    return _save_local(final_bytes, filename)
+
+
 def _read_manifest():
     data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     items = data.get("items") or []
@@ -72,9 +135,11 @@ def _read_manifest():
 
 def main():
     load_dotenv(ROOT / ".env")
+    load_dotenv(BACKEND_ROOT / ".env")
     app = create_app()
     with app.app_context():
         rows = _read_manifest()
+        seeded = 0
         for row in rows:
             brand = row.get("brand")
             name = row.get("name")
@@ -83,23 +148,16 @@ def main():
                 print("Skipping invalid row (missing brand/name/category)")
                 continue
 
-            source_url = row.get("source_url")
-            image_url = row.get("image_url")
-            try_on_asset_url = row.get("try_on_asset_url") or image_url
+            source_url = row.get("source_url") or row.get("image_url") or ""
+            raw_image_url = row.get("image_url") or ""
 
-            # upload to Cloudinary if configured
-            if _cloudinary_configured() and image_url:
-                img_bytes = _download_bytes(image_url)
-                public_id = f"{brand}-{name}-image".lower().replace(" ", "-")
-                image_url = _upload_bytes_to_cloudinary(
-                    file_bytes=img_bytes, public_id=public_id
-                )
-            if _cloudinary_configured() and try_on_asset_url:
-                asset_bytes = _download_bytes(try_on_asset_url)
-                public_id = f"{brand}-{name}-tryon".lower().replace(" ", "-")
-                try_on_asset_url = _upload_bytes_to_cloudinary(
-                    file_bytes=asset_bytes, public_id=public_id
-                )
+            print(f"Processing: {brand} — {name}")
+            slug = _slugify(f"{brand}-{name}")
+
+            if raw_image_url:
+                image_url = _process_image(raw_image_url, f"{slug}-img")
+            else:
+                image_url = raw_image_url
 
             item = ClothingItem.query.filter_by(
                 source="catalog", name=name, brand=brand
@@ -120,14 +178,16 @@ def main():
             item.category = category
             item.source_url = source_url
             item.image_url = image_url
-            item.try_on_asset = try_on_asset_url
+            item.try_on_asset = image_url  # white-bg PNG works well for Fashn.ai
             item.style_tags = row.get("style_tags") or []
             item.color_tags = row.get("color_tags") or []
             item.gender_tags = row.get("gender_tags") or []
+            item.price_usd = row.get("price_usd")
             item.is_active = True
+            seeded += 1
 
         db.session.commit()
-        print(f"Seeded/updated {len(rows)} catalog items from manifest.")
+        print(f"\nSeeded/updated {seeded} catalog items.")
 
 
 if __name__ == "__main__":
