@@ -1,11 +1,17 @@
 import { useAuth0 } from '@auth0/auth0-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-
+import { useNavigate } from 'react-router-dom'
+import { InnerNav } from '../components/InnerNav'
+import { VintageVideoBackground } from '../components/VintageVideoBackground'
 import { ApiClient } from '../services/api'
 import type { Outfit } from '../types'
 
-const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
+const apiBase   = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
+const audience  = import.meta.env.VITE_AUTH0_AUDIENCE
+const VIDEO_SRC = 'https://www.pexels.com/download/video/8346468/'
+
+const fg    = '#ede9e3'
+const muted = '#999'
 
 type OutfitRow = {
   id: string
@@ -16,12 +22,12 @@ type OutfitRow = {
 }
 
 export function ClosetPage() {
+  const navigate = useNavigate()
   const { getAccessTokenSilently } = useAuth0()
   const api = useMemo(() => new ApiClient(apiBase, getAccessTokenSilently), [getAccessTokenSilently])
-  const audience = import.meta.env.VITE_AUTH0_AUDIENCE
 
-  const [rows, setRows] = useState<OutfitRow[]>([])
-  const [err, setErr] = useState<string | null>(null)
+  const [rows, setRows]       = useState<OutfitRow[]>([])
+  const [err, setErr]         = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -38,65 +44,114 @@ export function ClosetPage() {
       }
     }
     void run()
-  }, [api, audience])
+  }, [api])
 
   return (
-    <div className="min-h-dvh px-6 py-10">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-violet-300/90">Closet</p>
-            <h1 className="mt-2 font-display text-3xl text-white">Saved outfits</h1>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              to="/app"
-              className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-            >
-              ← Home
-            </Link>
-            <Link
-              to="/app/builder"
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
-            >
-              Build →
-            </Link>
-          </div>
-        </div>
+    <div style={{ width: '100%', minHeight: '100vh', background: '#070707', color: fg, fontFamily: "'DM Sans',sans-serif", position: 'relative', overflowY: 'auto' }}>
 
-        <div className="mt-8">
-          {loading && <p className="text-sm text-zinc-400">Loading…</p>}
-          {!loading && err && <p className="text-sm text-amber-200">{err}</p>}
+      {/* VIDEO BG */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+        <VintageVideoBackground src={VIDEO_SRC} opacity={0.5} />
+      </div>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1, pointerEvents: 'none', background: 'rgba(4,3,2,0.82)' }} />
 
-          {!loading && !err && rows.length === 0 && (
-            <div className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-8 text-zinc-300">
-              <p className="text-white">No saved outfits yet</p>
-              <p className="mt-2 text-sm text-zinc-400">
-                Go to Builder → Try‑On → swipe right to save.
+      <div style={{ position: 'relative', zIndex: 10 }}>
+        <InnerNav />
+
+        <div style={{ padding: '52px 48px 80px' }}>
+
+          {/* HEADER */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 48, flexWrap: 'wrap', gap: 24 }}>
+            <div>
+              <p style={{ fontSize: 9.5, letterSpacing: '0.32em', color: muted, marginBottom: 14 }}>MY CLOSET</p>
+              <h1 style={{ fontFamily: "'Cormorant Garamond',Georgia,serif", fontSize: 'clamp(44px,6vw,88px)', fontWeight: 300, lineHeight: 0.88, letterSpacing: '-0.025em', color: fg }}>
+                Saved<br /><em style={{ fontStyle: 'italic' }}>Fits.</em>
+              </h1>
+              <p style={{ fontSize: 11.5, color: 'rgba(237,233,227,0.65)', marginTop: 18, letterSpacing: '0.05em', lineHeight: 1.85, maxWidth: 300 }}>
+                Outfits you swiped right on in the try-on experience.
               </p>
+            </div>
+            <button
+              onClick={() => navigate('/app/builder')}
+              style={{ background: 'transparent', color: fg, border: '1px solid rgba(255,255,255,0.18)', padding: '15px 36px', fontSize: 10, letterSpacing: '0.22em', fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
+            >
+              BUILD NEW FIT
+            </button>
+          </div>
+
+          {loading && <p style={{ fontSize: 11, color: muted, letterSpacing: '0.1em' }}>Loading…</p>}
+          {!loading && err && (
+            <div style={{ border: '1px solid rgba(139,32,32,0.3)', padding: '20px 24px' }}>
+              <p style={{ fontSize: 11, color: '#8b4040' }}>{err}</p>
             </div>
           )}
 
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {rows.map((o) => (
-              <div key={o.id} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <p className="text-sm font-semibold text-white">{o.name || 'Outfit'}</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Saved {new Date(o.updated_at).toLocaleString()}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-300">
-                  {o.items.map((i) => (
-                    <span key={i.id} className="rounded-full border border-white/10 bg-black/20 px-2 py-1">
-                      {i.category}: {i.name}
-                    </span>
-                  ))}
+          {/* EMPTY */}
+          {!loading && !err && rows.length === 0 && (
+            <div style={{ marginTop: 60, maxWidth: 400 }}>
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: 'rgba(237,233,227,0.55)', lineHeight: 1.2 }}>
+                No saved outfits yet.
+              </p>
+              <p style={{ fontSize: 11, color: muted, marginTop: 18, lineHeight: 1.9, letterSpacing: '0.04em', maxWidth: 300 }}>
+                Build a fit in the Builder, then hit Try On and swipe right to save it here.
+              </p>
+              <button
+                onClick={() => navigate('/app/builder')}
+                style={{ marginTop: 32, background: fg, color: '#070707', border: 'none', padding: '16px 40px', fontSize: 10, letterSpacing: '0.22em', fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', fontWeight: 500 }}
+              >
+                GO TO BUILDER
+              </button>
+            </div>
+          )}
+
+          {/* OUTFIT GRID */}
+          {!loading && !err && rows.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 1 }}>
+              {rows.map(outfit => (
+                <div
+                  key={outfit.id}
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', padding: '28px 26px', transition: 'border-color 0.2s', cursor: 'default' }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)')}
+                >
+                  {/* Thumbnail strip */}
+                  <div style={{ display: 'flex', gap: 1, marginBottom: 20, height: 72 }}>
+                    {outfit.items.slice(0, 4).map(item => (
+                      <div key={item.id} style={{ flex: 1, background: 'rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+                        {item.image_url
+                          ? <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(0.3)' }} />
+                          : <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.02)' }} />
+                        }
+                      </div>
+                    ))}
+                    {outfit.items.length === 0 && (
+                      <div style={{ flex: 1, background: 'rgba(255,255,255,0.02)' }} />
+                    )}
+                  </div>
+
+                  <p style={{ fontSize: 14, color: fg, fontWeight: 300, marginBottom: 6 }}>
+                    {outfit.name || 'Outfit'}
+                  </p>
+                  <p style={{ fontSize: 9, letterSpacing: '0.14em', color: muted, marginBottom: 16 }}>
+                    {new Date(outfit.updated_at).toLocaleDateString('en-CA')}
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                    {outfit.items.map(item => (
+                      <span
+                        key={item.id}
+                        style={{ fontSize: 8.5, letterSpacing: '0.12em', color: '#aaa', border: '1px solid #333', padding: '3px 8px' }}
+                      >
+                        {item.name}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
         </div>
       </div>
     </div>
   )
 }
-

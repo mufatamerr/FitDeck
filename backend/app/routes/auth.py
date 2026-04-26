@@ -17,16 +17,20 @@ def sync():
     claims = g.jwt_claims
     sub = claims.get("sub")
     email = claims.get("email") or claims.get("https://fitdeck-api/email")
-    name = claims.get("name") or claims.get("nickname")
+    jwt_name = claims.get("name") or claims.get("nickname")
     role = claims.get("role", "user")
+
+    body = request.get_json(silent=True) or {}
+    display_name = body.get("display_name") or jwt_name
 
     user = UserRecord.query.filter_by(auth0_id=sub).first()
     if not user:
-        user = UserRecord(auth0_id=sub, email=email, name=name, role=role)
+        user = UserRecord(auth0_id=sub, email=email, name=display_name, role=role)
         db.session.add(user)
     else:
         user.email = email or user.email
-        user.name = name or user.name
+        if display_name:
+            user.name = display_name
         user.role = role or user.role
     db.session.commit()
 

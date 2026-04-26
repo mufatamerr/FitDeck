@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 
 from app.db import init_db
@@ -13,6 +13,8 @@ from app.routes.swipe import swipe_bp
 from app.routes.wardrobe import wardrobe_bp
 from app.routes.fitbot import fitbot_bp
 from app.routes.admin import admin_bp
+from app.routes.tryon_photo import tryon_photo_bp
+from app.routes.admin_dev import admin_dev_bp
 
 
 def create_app():
@@ -53,10 +55,18 @@ def create_app():
     app.register_blueprint(wardrobe_bp, url_prefix="/wardrobe")
     app.register_blueprint(fitbot_bp, url_prefix="/fitbot")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(tryon_photo_bp, url_prefix="/tryon")
+    app.register_blueprint(admin_dev_bp, url_prefix="/dev-admin")
 
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "fitdeck-api"}
+
+    _uploads_dir = Path(__file__).resolve().parent.parent / "uploads"
+
+    @app.get("/uploads/<path:filename>")
+    def serve_upload(filename: str):
+        return send_from_directory(_uploads_dir, filename)
 
     @app.get("/health/bootstrap")
     def health_bootstrap():

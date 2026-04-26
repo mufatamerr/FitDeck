@@ -6,14 +6,16 @@ import { useFitAuth } from '../auth/FitAuth'
 
 export function SignInPage() {
   const { isAuthenticated, isConfigured, isLoading, loginWithRedirect } = useFitAuth()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
+  const [password, setPassword]     = useState('')
 
   if (isConfigured && isAuthenticated) return <Navigate to="/app" replace />
 
   const goEmail = async () => {
+    const isEmail = identifier.includes('@')
     await loginWithRedirect({
       appState: { returnTo: '/app' },
-      authorizationParams: { login_hint: email || undefined },
+      authorizationParams: { login_hint: isEmail ? identifier : undefined },
     })
   }
 
@@ -21,7 +23,7 @@ export function SignInPage() {
   const fg  = '#ede9e3'
 
   return (
-    <div style={{ width: '100%', height: '100%', background: bg, display: 'flex', flexDirection: 'column', position: 'relative', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ width: '100%', minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', position: 'relative', fontFamily: "'DM Sans',sans-serif" }}>
       <DottedSurface className="opacity-80" />
       <nav style={{ padding: '26px 44px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 2 }}>
         <Link to="/" style={{ fontSize: 13, letterSpacing: '0.22em', color: fg, fontFamily: 'inherit', fontWeight: 500 }}>
@@ -40,11 +42,19 @@ export function SignInPage() {
             </h2>
 
             <input
-              type="email"
-              placeholder="YOUR EMAIL"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              type="text"
+              placeholder="USERNAME OR EMAIL"
+              value={identifier}
+              onChange={e => setIdentifier(e.target.value)}
               className="input-underline"
+            />
+            <input
+              type="password"
+              placeholder="PASSWORD"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="input-underline"
+              style={{ marginTop: 20 }}
             />
 
             <button
@@ -52,7 +62,7 @@ export function SignInPage() {
               onClick={() => void goEmail()}
               disabled={isLoading || !isConfigured}
             >
-              Continue
+              Sign In
             </button>
 
             {!isConfigured && (

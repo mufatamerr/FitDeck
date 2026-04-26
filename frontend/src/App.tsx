@@ -17,6 +17,10 @@ import { AdminOverviewPage } from './pages/AdminOverviewPage'
 import { AdminShell } from './components/admin/AdminShell'
 import { BuilderPage } from './pages/BuilderPage'
 import { ClosetPage } from './pages/ClosetPage'
+import { AdminLoginPage } from './pages/AdminLoginPage'
+import { AdminDashboard } from './pages/AdminDashboard'
+import { FitBotTestPage } from './pages/FitBotTestPage'
+import { HandTestPage } from './pages/HandTestPage'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isConfigured, isLoading } = useFitAuth()
@@ -41,6 +45,8 @@ function AdminRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isConfigured, isLoading, getAccessTokenSilently } = useFitAuth()
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
 
+  if (sessionStorage.getItem('admin_token')) return <>{children}</>
+
   useEffect(() => {
     if (!isAuthenticated || !isConfigured) return
     const check = async () => {
@@ -62,8 +68,8 @@ function AdminRoute({ children }: { children: ReactNode }) {
     return <div className="flex min-h-dvh items-center justify-center text-zinc-400">Loading…</div>
   }
   if (!isConfigured) return <>{children}</>
-  if (!isAuthenticated) return <Navigate to="/" replace />
-  if (!isAdmin) return <Navigate to="/app" replace />
+  if (!isAuthenticated) return <Navigate to="/admin-login" replace />
+  if (!isAdmin) return <Navigate to="/admin-login" replace />
   return <>{children}</>
 }
 
@@ -83,6 +89,8 @@ export default function App() {
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/signin" element={<SignInPage />} />
       <Route path="/callback" element={<CallbackPage />} />
+      <Route path="/admin-login" element={<AdminLoginPage />} />
+      <Route path="/admin-dashboard" element={<AdminDashboard />} />
       <Route
         element={
           <ProtectedRoute>
@@ -96,6 +104,8 @@ export default function App() {
         <Route path="/app/closet" element={<ClosetPage />} />
         <Route path="/app/wardrobe" element={<WardrobePage />} />
         <Route path="/app/wardrobe/add" element={<WardrobeAddPage />} />
+        <Route path="/app/fitbot-test" element={<FitBotTestPage />} />
+        <Route path="/app/hand-test" element={<HandTestPage />} />
       </Route>
       <Route
         element={

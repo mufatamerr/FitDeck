@@ -102,7 +102,7 @@ export function FitAuthProvider({ children }: { children: ReactNode }) {
         redirect_uri: `${window.location.origin}/callback`,
         audience: audience || undefined,
       }}
-      cacheLocation="localstorage"
+      cacheLocation="memory"
     >
       <Auth0Bridge>{children}</Auth0Bridge>
     </Auth0Provider>

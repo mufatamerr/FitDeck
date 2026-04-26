@@ -55,35 +55,10 @@ export function BuilderPage() {
     currentOutfit.items.find((i) => i.category === cat)
 
   const openTryOn = () => {
-    const base: Outfit = {
-      id: 'builder',
-      name: 'My Fit',
-      items: currentOutfit.items,
-    }
-    // simple variations: remove jacket, swap pants if available
-    const noJacket: Outfit = {
-      ...base,
-      id: 'builder-2',
-      name: 'No jacket',
-      items: base.items.filter((i) => i.category !== 'jacket'),
-    }
-    const pool = [...catalog, ...wardrobe]
-    const altPants = pool.find(
-      (i) => i.category === 'pants' && !base.items.some((x) => x.id === i.id),
+    const q: Outfit[] = [{ id: 'builder', name: 'My Fit', items: currentOutfit.items }].filter(
+      (o) => o.items.length > 0,
     )
-    const alt: Outfit | null = altPants
-      ? {
-          ...base,
-          id: 'builder-3',
-          name: 'Alt pants',
-          items: [
-            ...base.items.filter((i) => i.category !== 'pants'),
-            altPants,
-          ],
-        }
-      : null
-
-    const q = [base, noJacket, ...(alt ? [alt] : [])].filter((o) => o.items.length > 0)
+    if (q.length === 0) return
     setQueue(q)
     setTryOnOpen(true)
   }
