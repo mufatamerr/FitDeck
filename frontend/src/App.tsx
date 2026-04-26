@@ -1,11 +1,13 @@
-import { useAuth0 } from '@auth0/auth0-react'
 import type { ReactNode } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { useFitAuth } from './auth/FitAuth'
 import { FitBotDock } from './components/fitbot/FitBotDock'
 import { AppHome } from './pages/AppHome'
 import { CallbackPage } from './pages/CallbackPage'
 import { DiscoverPage } from './pages/DiscoverPage'
 import { LandingPage } from './pages/LandingPage'
+import { SignInPage } from './pages/SignInPage'
+import { SignUpPage } from './pages/SignUpPage'
 import { WardrobeAddPage } from './pages/WardrobeAddPage'
 import { WardrobePage } from './pages/WardrobePage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
@@ -14,7 +16,7 @@ import { BuilderPage } from './pages/BuilderPage'
 import { ClosetPage } from './pages/ClosetPage'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth0()
+  const { isAuthenticated, isConfigured, isLoading } = useFitAuth()
 
   if (isLoading) {
     return (
@@ -22,6 +24,9 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
         Loading…
       </div>
     )
+  }
+  if (!isConfigured) {
+    return <>{children}</>
   }
   if (!isAuthenticated) {
     return <Navigate to="/" replace />
@@ -42,6 +47,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/signup" element={<SignUpPage />} />
+      <Route path="/signin" element={<SignInPage />} />
       <Route path="/callback" element={<CallbackPage />} />
       <Route
         element={
