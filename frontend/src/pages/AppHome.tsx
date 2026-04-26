@@ -1,228 +1,161 @@
-import { useAuth0 } from '@auth0/auth0-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useFitAuth } from '../auth/FitAuth'
+import { SiteHeader } from '../components/SiteHeader'
 
-import { ApiClient } from '../services/api'
-import { TryOnModal } from '../components/tryon/TryOnModal'
-import type { Outfit } from '../types'
 const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
 
 export function AppHome() {
-  const { user, logout, getAccessTokenSilently } = useAuth0()
+  const { user, logout, getAccessTokenSilently, isAuthenticated, isConfigured } =
+    useFitAuth()
   const [sync, setSync] = useState<Record<string, unknown> | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tryOnOpen, setTryOnOpen] = useState(false)
 
   const runSync = useCallback(async () => {
+    if (!isConfigured || !isAuthenticated) {
+      setSync({
+        preview: true,
+        message: 'Auth0 is not configured yet. This app screen is running in frontend preview mode.',
+      })
+      setSyncError(null)
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setSyncError(null)
     try {
       const audience = import.meta.env.VITE_AUTH0_AUDIENCE
-      const api = new ApiClient(apiBase, getAccessTokenSilently)
-      const data = await api.fetchJson<Record<string, unknown>>(
-        '/auth/sync',
-        { method: 'POST' },
-        audience,
-      )
-      setSync(data)
+      const token = await getAccessTokenSilently({
+        authorizationParams: audience ? { audience } : undefined,
+      })
+      const res = await fetch(`${apiBase}/auth/sync`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSync(null)
+        setSyncError(
+          typeof data.detail === 'string'
+            ? data.detail
+            : data.error || `HTTP ${res.status}`,
+        )
+        return
+      }
+      setSync(data as Record<string, unknown>)
     } catch (e) {
       setSync(null)
       setSyncError(e instanceof Error ? e.message : 'Sync failed')
     } finally {
       setLoading(false)
     }
-  }, [getAccessTokenSilently])
+  }, [getAccessTokenSilently, isAuthenticated, isConfigured])
 
   useEffect(() => {
     void runSync()
   }, [runSync])
 
-  const demoQueue: Outfit[] = [
-    {
-      id: 'demo-1',
-      name: 'Demo outfit 1',
-      items: [
-        {
-          id: 'shirt-1',
-          name: 'Demo shirt',
-          brand: 'FitDeck',
-          category: 'shirt',
-          try_on_asset: 'https://dummyimage.com/600x600/7c3aed/ffffff.png&text=SHIRT',
-        },
-        {
-          id: 'pants-1',
-          name: 'Demo pants',
-          brand: 'FitDeck',
-          category: 'pants',
-          try_on_asset: 'https://dummyimage.com/600x600/111827/ffffff.png&text=PANTS',
-        },
-      ],
-    },
-    {
-      id: 'demo-2',
-      name: 'Demo outfit 2',
-      items: [
-        {
-          id: 'jacket-1',
-          name: 'Demo jacket',
-          brand: 'FitDeck',
-          category: 'jacket',
-          try_on_asset: 'https://dummyimage.com/600x600/0ea5e9/ffffff.png&text=JACKET',
-        },
-        {
-          id: 'pants-2',
-          name: 'Demo pants',
-          brand: 'FitDeck',
-          category: 'pants',
-          try_on_asset: 'https://dummyimage.com/600x600/111827/ffffff.png&text=PANTS',
-        },
-        {
-          id: 'shoes-1',
-          name: 'Demo shoes',
-          brand: 'FitDeck',
-          category: 'shoes',
-          try_on_asset: 'https://dummyimage.com/600x600/f59e0b/111827.png&text=SHOES',
-        },
-      ],
-    },
-  ]
-
   return (
-    <div className="min-h-dvh px-6 py-12">
-      <div className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-md">
-        <p className="text-xs font-medium uppercase tracking-widest text-violet-300/90">
-          Authenticated
-        </p>
-        <h1 className="mt-2 font-display text-3xl text-white">
-          Welcome{user?.name ? `, ${user.name}` : ''}
-        </h1>
-        <p className="mt-2 text-sm text-zinc-400">{user?.email}</p>
+    <main className="pb-20">
+      <SiteHeader />
 
-        <div className="mt-8 rounded-xl border border-white/10 bg-black/30 p-4 text-left">
-          <p className="text-xs uppercase tracking-wider text-zinc-500">
-            POST /auth/sync (JWT validated on Flask)
+      <section className="page-shell grid gap-6 px-6 pb-8 pt-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="glass-panel px-6 py-8 sm:px-8">
+          <p className="section-kicker">Authenticated app shell</p>
+          <h1 className="mt-4 font-display text-5xl leading-none text-white sm:text-6xl">
+            Welcome{user?.name ? `, ${user.name}` : ''}.
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
+            This protected screen now matches the rest of the runway theme, while still
+            keeping the backend JWT sync check visible for your group.
           </p>
-          {loading && <p className="mt-2 text-sm text-zinc-400">Calling API…</p>}
-          {!loading && syncError && (
-            <p className="mt-2 text-sm text-amber-200">
-              {syncError}
-              <span className="mt-2 block text-xs text-zinc-500">
-                Ensure the Flask backend is running and root <code>.env</code> has{' '}
-                <code>AUTH0_DOMAIN</code> and <code>AUTH0_AUDIENCE</code> matching this
-                app&apos;s API identifier.
-              </span>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <article className="dashboard-mini-card">
+              <p className="dashboard-mini-card__label">Profile</p>
+              <p className="dashboard-mini-card__value">
+                {user?.email ?? (isConfigured ? 'No email found' : 'Preview mode')}
+              </p>
+            </article>
+            <article className="dashboard-mini-card">
+              <p className="dashboard-mini-card__label">Auth status</p>
+              <p className="dashboard-mini-card__value">
+                {!isConfigured
+                  ? 'Preview mode'
+                  : loading
+                    ? 'Checking token'
+                    : syncError
+                      ? 'Needs attention'
+                      : 'Connected'}
+              </p>
+            </article>
+            <article className="dashboard-mini-card">
+              <p className="dashboard-mini-card__label">Next module</p>
+              <p className="dashboard-mini-card__value">Catalog + Try-On</p>
+            </article>
+          </div>
+
+          <div className="mt-8 flex flex-wrap gap-3">
+            <button type="button" onClick={() => void runSync()} className="button-primary">
+              Refresh sync
+            </button>
+            <Link to="/" className="button-secondary">
+              Return home
+            </Link>
+            <button
+              type="button"
+              onClick={() =>
+                logout({ logoutParams: { returnTo: window.location.origin } })
+              }
+              className="button-ghost"
+            >
+              Log out
+            </button>
+          </div>
+        </div>
+
+        <aside className="glass-panel px-6 py-8">
+          <p className="section-kicker">Runway map</p>
+          <div className="mt-4 space-y-4 text-sm leading-6 text-zinc-300">
+            <p>
+              `1.` Upload a full-body image and start the try-on flow.
             </p>
+            <p>
+              `2.` Swipe through outfits and keep the same red-carpet presentation.
+            </p>
+            <p>
+              `3.` Hand the result to FitBot for restyling and voice feedback.
+            </p>
+          </div>
+        </aside>
+      </section>
+
+      <section className="page-shell px-6">
+        <div className="glass-panel px-6 py-8 sm:px-8">
+          <p className="section-kicker">Backend verification</p>
+          <h2 className="mt-3 font-display text-4xl text-white">`POST /auth/sync`</h2>
+          {loading && <p className="mt-4 text-sm text-zinc-400">Calling API…</p>}
+          {!loading && syncError && (
+            <div className="status-panel mt-5">
+              <p className="text-sm text-amber-100">{syncError}</p>
+              <p className="mt-2 text-xs leading-5 text-zinc-400">
+                Ensure the Flask backend is running and root `.env` has `AUTH0_DOMAIN`
+                and `AUTH0_AUDIENCE` matching this app&apos;s API identifier.
+              </p>
+            </div>
           )}
           {!loading && sync && (
-            <pre className="mt-3 overflow-x-auto text-xs text-emerald-200/90">
+            <pre className="status-panel mt-5 overflow-x-auto text-xs text-emerald-100">
               {JSON.stringify(sync, null, 2)}
             </pre>
           )}
         </div>
-
-        <div className="mt-8 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => setTryOnOpen(true)}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
-          >
-            Open Try-On (demo)
-          </button>
-          <Link
-            to="/app/discover"
-            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-          >
-            Discover →
-          </Link>
-          <Link
-            to="/app/builder"
-            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-          >
-            Builder →
-          </Link>
-          <Link
-            to="/app/closet"
-            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-          >
-            Closet →
-          </Link>
-          <Link
-            to="/app/wardrobe"
-            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-          >
-            My Wardrobe →
-          </Link>
-          <Link
-            to="/admin/users"
-            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-          >
-            Admin Users →
-          </Link>
-          <Link
-            to="/admin/catalog"
-            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-          >
-            Admin Catalog →
-          </Link>
-          <button
-            type="button"
-            onClick={() => void runSync()}
-            className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white hover:bg-white/5"
-          >
-            Retry sync
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              logout({ logoutParams: { returnTo: window.location.origin } })
-            }
-            className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15"
-          >
-            Log out
-          </button>
-          <Link
-            to="/"
-            className="inline-flex items-center rounded-lg px-4 py-2 text-sm text-zinc-400 hover:text-white"
-          >
-            ← Home
-          </Link>
-        </div>
-      </div>
-
-      {tryOnOpen && (
-        <TryOnModal
-          outfitQueue={demoQueue}
-          onClose={() => setTryOnOpen(false)}
-          onSaveOutfit={async () => {
-            const audience = import.meta.env.VITE_AUTH0_AUDIENCE
-            const api = new ApiClient(apiBase, getAccessTokenSilently)
-            const outfitId = await api.fetchJson<{ outfit_id: string }>(
-              '/outfits',
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  name: 'Saved from Try-On',
-                  item_ids: [],
-                }),
-              },
-              audience,
-            )
-
-            await api.fetchJson<{ ok: boolean }>(
-              '/swipe',
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ outfit_id: outfitId.outfit_id, direction: 'right' }),
-              },
-              audience,
-            )
-          }}
-        />
-      )}
-
-    </div>
+      </section>
+    </main>
   )
 }
