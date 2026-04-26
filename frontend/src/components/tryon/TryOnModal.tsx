@@ -7,6 +7,7 @@ import type { ClothingCategory, ClothingItem, Outfit } from '../../types'
 import { TryOnCamera } from './TryOnCamera'
 import { TryOnLoader } from './TryOnLoader'
 import { TryOnResult } from './TryOnResult'
+import { useHandGestures } from './useHandGestures'
 
 const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
 
@@ -18,11 +19,6 @@ type Props = {
   onClose: () => void
   onSaveOutfit: (outfit: Outfit) => Promise<void> | void
   onSkipOutfit?: (outfit: Outfit) => void
-}
-
-function fashnCategory(cat: ClothingCategory): string {
-  if (cat === 'pants') return 'bottoms'
-  return 'tops'
 }
 
 function primaryGarment(items: ClothingItem[]): ClothingItem | null {
@@ -43,7 +39,7 @@ function captureFrame(video: HTMLVideoElement): string {
   return c.toDataURL('image/jpeg', 0.85)
 }
 
-// Fetch a garment URL (including localhost ones) and convert to base64 data URI.
+// Fetch a garment URL in the browser and convert to base64 data URI.
 // Fashn.ai is a cloud service and cannot reach 127.0.0.1, so we always send base64.
 async function garmentToDataUri(url: string): Promise<string> {
   const res = await fetch(url)
@@ -77,14 +73,13 @@ export function TryOnModal({
   }, [setVoiceWakeBlocked])
 
   // ── Webcam ────────────────────────────────────────────────────────────────
-  const videoRef      = useRef<HTMLVideoElement>(null)
-  const [cameraReady, setCameraReady]   = useState(false)
-  const [cameraError, setCameraError]   = useState<string | null>(null)
+  const videoRef    = useRef<HTMLVideoElement>(null)
+  const [cameraReady, setCameraReady] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
 
   useEffect(() => {
     let stream: MediaStream | null = null
     let cancelled = false
-
     const start = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -99,7 +94,6 @@ export function TryOnModal({
         if (!cancelled) setCameraError(e instanceof Error ? e.message : 'Camera permission denied')
       }
     }
-
     void start()
     return () => {
       cancelled = true
@@ -108,22 +102,23 @@ export function TryOnModal({
   }, [])
 
   // ── App state ─────────────────────────────────────────────────────────────
-  const [appState, setAppState]         = useState<AppState>('camera')
-  const [idx, setIdx]                   = useState(startIndex)
-  const [snapshotDataUrl, setSnapshot]  = useState('')
-  const [resultUrl, setResultUrl]       = useState<string | null>(null)
-  const [generateError, setError]       = useState<string | null>(null)
-  const [loadingStep, setLoadingStep]   = useState('')
-  const [saving, setSaving]             = useState(false)
+  const [appState, setAppState]       = useState<AppState>('camera')
+  const [idx, setIdx]                 = useState(startIndex)
+  const [snapshotDataUrl, setSnapshot] = useState('')
+  const [resultUrl, setResultUrl]     = useState<string | null>(null)
+  const [generateError, setError]     = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
+
+  const appStateRef = useRef(appState)
+  appStateRef.current = appState
 
   const outfit = outfitQueue[idx]
 
-  // ── Snap → generate (chained: shirt result becomes person input for pants) ─
+  // ── Snap → generate ───────────────────────────────────────────────────────
   const handleSnap = useCallback(async () => {
     const video = videoRef.current
     if (!video || !outfit) return
 
-    // Only try on tops and bottoms — Fashn.ai doesn't support shoes/accessories
     const ORDER: ClothingCategory[] = ['shirt', 'jacket', 'pants']
     const tryOnItems = ORDER.flatMap((cat) => outfit.items.filter((i) => i.category === cat))
     if (tryOnItems.length === 0) {
@@ -137,38 +132,30 @@ export function TryOnModal({
     setError(null)
 
     try {
-      // First call uses the raw webcam frame; subsequent calls use the previous result URL.
-      // This chains the generations so the final image shows the complete outfit.
-      let personInput: string = frame.split(',')[1]  // base64, no prefix
-      let isResultUrl = false
+      // Fetch all garment images as base64 in the browser (Fashn.ai can't reach localhost)
+      const garmentDataUris = await Promise.all(
+        tryOnItems.map((item) => {
+          const url = item.try_on_asset || item.image_url
+          return url ? garmentToDataUri(url) : Promise.resolve(null)
+        }),
+      )
 
-      for (let i = 0; i < tryOnItems.length; i++) {
-        const item = tryOnItems[i]
-        setLoadingStep(`Generating ${item.name} (${i + 1}/${tryOnItems.length})…`)
+      // Backend chains generations server-side: shirt → jacket → pants
+      const data = await api.fetchJson<{ result_image_url: string }>('/tryon/photo', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_base64: frame,
+          items: tryOnItems.map((item, i) => ({
+            id:           item.id,
+            category:     item.category,
+            try_on_asset: garmentDataUris[i] ?? null,
+            image_url:    null,
+          })),
+        }),
+      })
 
-        const garmentUrl = item.try_on_asset || item.image_url
-        if (!garmentUrl) continue
-
-        // Browser fetches garment — Fashn.ai cannot reach localhost URLs
-        const garmentDataUri = await garmentToDataUri(garmentUrl)
-
-        const data = await api.fetchJson<{ result_url: string }>('/tryon/generate', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            person_image:  personInput,
-            person_is_url: isResultUrl,
-            garment_image: garmentDataUri,
-            category:      fashnCategory(item.category),
-          }),
-        })
-
-        // Feed this result as the "person" photo for the next garment
-        personInput  = data.result_url
-        isResultUrl  = true
-      }
-
-      setResultUrl(personInput)
+      setResultUrl(data.result_image_url)
       setAppState('result')
     } catch (e) {
       console.error('[TryOn] generate failed:', e)
@@ -182,11 +169,7 @@ export function TryOnModal({
   const handleSave = useCallback(async () => {
     if (!outfit || saving) return
     setSaving(true)
-    try {
-      await onSaveOutfit(outfit)
-    } finally {
-      setSaving(false)
-    }
+    try { await onSaveOutfit(outfit) } finally { setSaving(false) }
     setResultUrl(null)
     setAppState('camera')
   }, [onSaveOutfit, outfit, saving])
@@ -195,7 +178,6 @@ export function TryOnModal({
     if (outfit) onSkipOutfit?.(outfit)
     setResultUrl(null)
     setAppState('camera')
-    // Advance to next outfit if there are more
     setIdx((i) => Math.min(i + 1, outfitQueue.length - 1))
   }, [onSkipOutfit, outfit, outfitQueue.length])
 
@@ -204,10 +186,26 @@ export function TryOnModal({
     setAppState('camera')
   }, [])
 
+  // ── Gesture hook ──────────────────────────────────────────────────────────
+  // GESTURE HOOK: ingest(handLandmarks) should be called each frame with live
+  // hand landmark data. Install @mediapipe/hands and add a useHands(videoRef)
+  // hook here, then call ingest(landmarks) in a useEffect each frame.
+  const { ingest } = useHandGestures({
+    onFist:  () => { if (appStateRef.current === 'camera') void handleSnap() },
+    onLeft:  () => { if (appStateRef.current === 'result') handleDiscard() },
+    onRight: () => { if (appStateRef.current === 'result') void handleSave() },
+    mirrorX: true,
+  })
+
+  // Expose ingest so hand-tracking integration can feed landmarks in:
+  // e.g.  const { landmarks } = useHands(videoRef)
+  //       useEffect(() => ingest(landmarks), [landmarks])
+  void ingest  // suppress unused warning until hand tracking is wired
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black">
-      {/* Webcam — always mounted; CSS repositions it per state */}
+      {/* Webcam — always mounted; repositioned by CSS per state */}
       <video
         ref={videoRef}
         playsInline
@@ -222,7 +220,6 @@ export function TryOnModal({
         style={appState === 'result' ? { width: 120, height: 160 } : undefined}
       />
 
-      {/* Camera error */}
       {cameraError && (
         <div className="absolute inset-0 z-10 flex items-center justify-center">
           <div className="max-w-sm rounded-2xl bg-zinc-900 p-8 text-center">
@@ -232,7 +229,6 @@ export function TryOnModal({
         </div>
       )}
 
-      {/* Camera state */}
       {appState === 'camera' && !cameraError && (
         <TryOnCamera
           garmentItem={outfit ? primaryGarment(outfit.items) : null}
@@ -241,12 +237,10 @@ export function TryOnModal({
         />
       )}
 
-      {/* Loading state */}
       {appState === 'loading' && snapshotDataUrl && (
-        <TryOnLoader snapshotDataUrl={snapshotDataUrl} step={loadingStep} />
+        <TryOnLoader snapshotDataUrl={snapshotDataUrl} />
       )}
 
-      {/* Result state */}
       {appState === 'result' && resultUrl && (
         <TryOnResult
           resultUrl={resultUrl}
@@ -256,21 +250,18 @@ export function TryOnModal({
         />
       )}
 
-      {/* Generation error toast */}
       {generateError && appState === 'camera' && (
         <div className="absolute bottom-36 left-1/2 z-30 -translate-x-1/2 rounded-full bg-red-900/80 px-4 py-2 text-xs text-red-200">
           {generateError}
         </div>
       )}
 
-      {/* Saving indicator */}
       {saving && (
         <div className="absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-full bg-violet-600/90 px-4 py-2 text-xs text-white">
           Saving…
         </div>
       )}
 
-      {/* Close button — always visible */}
       <button
         type="button"
         onClick={onClose}
@@ -281,7 +272,6 @@ export function TryOnModal({
         ✕
       </button>
 
-      {/* Outfit counter — shown in camera state when multiple outfits */}
       {appState === 'camera' && outfitQueue.length > 1 && (
         <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-xs text-zinc-300 backdrop-blur">
           {idx + 1} / {outfitQueue.length}

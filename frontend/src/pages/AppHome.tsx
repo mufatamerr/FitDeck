@@ -172,6 +172,18 @@ export function AppHome() {
           >
             Retry sync
           </button>
+          <Link
+            to="/app/fitbot-test"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            FitBot test →
+          </Link>
+          <Link
+            to="/app/video-tryon"
+            className="rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            Video try-on →
+          </Link>
           <button
             type="button"
             onClick={() =>
