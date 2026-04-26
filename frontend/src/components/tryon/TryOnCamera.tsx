@@ -1,39 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-
 import type { ClothingItem } from '../../types'
 
 type Props = {
   garmentItem: ClothingItem | null
   onSnap: () => void
+  countdown: number | null
   disabled?: boolean
 }
 
-export function TryOnCamera({ garmentItem, onSnap, disabled }: Props) {
+export function TryOnCamera({ garmentItem, onSnap, countdown, disabled }: Props) {
   const thumb = garmentItem?.image_url || garmentItem?.try_on_asset
-  const [countdown, setCountdown] = useState<number | null>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const startCountdown = () => {
-    if (disabled || countdown !== null) return
-    setCountdown(3)
-  }
-
-  useEffect(() => {
-    if (countdown === null) return
-
-    if (countdown === 0) {
-      timerRef.current = null
-      setCountdown(null)
-      onSnap()
-      return
-    }
-
-    timerRef.current = setTimeout(() => setCountdown((c) => (c ?? 1) - 1), 1000)
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [countdown, onSnap])
-
   const isCounting = countdown !== null
 
   return (
@@ -69,18 +44,12 @@ export function TryOnCamera({ garmentItem, onSnap, disabled }: Props) {
       {/* Snap button — bottom center */}
       <div className="mb-10 flex flex-col items-center gap-3">
         <p className="text-xs text-zinc-400">
-          {isCounting ? 'Get ready…' : 'Step back and face the camera'}
+          {isCounting ? 'Get ready…' : 'Make a fist or tap to snap'}
         </p>
 
-        {/*
-         * GESTURE HOOK: Replace or supplement this button with fist gesture detection.
-         * When a fist is held for 1000ms, call startCountdown() (or onSnap() directly to skip timer).
-         * Partner is implementing gesture detection separately.
-         * startCountdown() → 3-2-1 → onSnap() is the trigger chain.
-         */}
         <button
           type="button"
-          onClick={startCountdown}
+          onClick={onSnap}
           disabled={disabled || isCounting}
           className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-white/10 text-white shadow-lg backdrop-blur transition active:scale-95 disabled:opacity-40"
           aria-label="Snap photo"
@@ -93,7 +62,7 @@ export function TryOnCamera({ garmentItem, onSnap, disabled }: Props) {
         </button>
 
         <p className="text-xs text-zinc-500">
-          {isCounting ? `Snapping in ${countdown}…` : 'Tap to snap'}
+          {isCounting ? `Snapping in ${countdown}…` : 'Tap or ✊ fist'}
         </p>
       </div>
     </div>

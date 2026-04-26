@@ -8,6 +8,7 @@ import { TryOnCamera } from './TryOnCamera'
 import { TryOnLoader } from './TryOnLoader'
 import { TryOnResult } from './TryOnResult'
 import { useHandGestures } from './useHandGestures'
+import { useHands } from './useHands'
 
 const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
 
@@ -36,12 +37,12 @@ function captureFrame(video: HTMLVideoElement): string {
   c.width  = video.videoWidth  || 1280
   c.height = video.videoHeight || 720
   c.getContext('2d')!.drawImage(video, 0, 0)
-  return c.toDataURL('image/jpeg', 0.85)
+  return c.toDataURL('image/jpeg', 0.97)
 }
 
-// Fetch a garment URL in the browser and convert to base64 data URI.
-// Fashn.ai is a cloud service and cannot reach 127.0.0.1, so we always send base64.
-async function garmentToDataUri(url: string): Promise<string> {
+// Always fetch and convert to base64 — gives Fashn the raw bytes at full quality
+// regardless of what the CDN might serve or compress.
+async function garmentToFashnSrc(url: string): Promise<string> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to fetch garment image: ${res.status}`)
   const blob = await res.blob()
@@ -72,8 +73,9 @@ export function TryOnModal({
     return () => setVoiceWakeBlocked(false)
   }, [setVoiceWakeBlocked])
 
-  // ── Webcam ────────────────────────────────────────────────────────────────
+  // ── Webcam + skeleton overlay ────────────────────────────────────────────
   const videoRef    = useRef<HTMLVideoElement>(null)
+  const skeletonRef = useRef<HTMLCanvasElement>(null)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
 
@@ -102,17 +104,34 @@ export function TryOnModal({
   }, [])
 
   // ── App state ─────────────────────────────────────────────────────────────
-  const [appState, setAppState]       = useState<AppState>('camera')
-  const [idx, setIdx]                 = useState(startIndex)
+  const [appState, setAppState]        = useState<AppState>('camera')
+  const [idx, setIdx]                  = useState(startIndex)
   const [snapshotDataUrl, setSnapshot] = useState('')
-  const [resultUrl, setResultUrl]     = useState<string | null>(null)
-  const [generateError, setError]     = useState<string | null>(null)
-  const [saving, setSaving]           = useState(false)
+  const [resultUrl, setResultUrl]      = useState<string | null>(null)
+  const [generateError, setError]      = useState<string | null>(null)
+  const [saving, setSaving]            = useState(false)
+  const [countdown, setCountdown]      = useState<number | null>(null)
+  const [loadingStep, setLoadingStep]  = useState<{ current: number; total: number } | null>(null)
 
-  const appStateRef = useRef(appState)
+  const appStateRef  = useRef(appState)
   appStateRef.current = appState
+  const countdownRef = useRef(countdown)
+  countdownRef.current = countdown
 
   const outfit = outfitQueue[idx]
+
+  // ── Countdown (fist gesture or button → 3-2-1 → snap) ────────────────────
+  const startCountdown = useCallback(() => {
+    if (countdownRef.current !== null || appStateRef.current !== 'camera') return
+    setCountdown(3)
+  }, [])
+
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown === 0) { setCountdown(null); void handleSnap(); return }
+    const t = setTimeout(() => setCountdown((c) => (c ?? 1) - 1), 1000)
+    return () => clearTimeout(t)
+  }, [countdown]) // handleSnap added below after definition
 
   // ── Snap → generate ───────────────────────────────────────────────────────
   const handleSnap = useCallback(async () => {
@@ -130,37 +149,44 @@ export function TryOnModal({
     setSnapshot(frame)
     setAppState('loading')
     setError(null)
+    setLoadingStep({ current: 1, total: tryOnItems.length })
 
     try {
-      // Fetch all garment images as base64 in the browser (Fashn.ai can't reach localhost)
-      const garmentDataUris = await Promise.all(
+      // Fetch all garment images as base64 upfront
+      const garmentSrcs = await Promise.all(
         tryOnItems.map((item) => {
           const url = item.try_on_asset || item.image_url
-          return url ? garmentToDataUri(url) : Promise.resolve(null)
+          return url ? garmentToFashnSrc(url) : Promise.resolve(null)
         }),
       )
 
-      // Backend chains generations server-side: shirt → jacket → pants
-      const data = await api.fetchJson<{ result_image_url: string }>('/tryon/photo', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image_base64: frame,
-          items: tryOnItems.map((item, i) => ({
-            id:           item.id,
-            category:     item.category,
-            try_on_asset: garmentDataUris[i] ?? null,
-            image_url:    null,
-          })),
-        }),
-      })
+      // Chain calls: each result becomes the model image for the next garment
+      let modelImage: { image_base64: string } | { model_image_url: string } = { image_base64: frame }
+      let resultUrl = ''
 
-      setResultUrl(data.result_image_url)
+      for (let i = 0; i < tryOnItems.length; i++) {
+        setLoadingStep({ current: i + 1, total: tryOnItems.length })
+        const garmentSrc = garmentSrcs[i]
+        if (!garmentSrc) continue
+
+        const data = await api.fetchJson<{ result_image_url: string }>('/tryon/photo', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...modelImage, garment_src: garmentSrc }),
+        })
+
+        resultUrl  = data.result_image_url
+        modelImage = { model_image_url: resultUrl }
+      }
+
+      setResultUrl(resultUrl)
+      setLoadingStep(null)
       setAppState('result')
     } catch (e) {
       console.error('[TryOn] generate failed:', e)
       const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Generation failed'
       setError(msg)
+      setLoadingStep(null)
       setAppState('camera')
     }
   }, [api, outfit])
@@ -186,21 +212,55 @@ export function TryOnModal({
     setAppState('camera')
   }, [])
 
-  // ── Gesture hook ──────────────────────────────────────────────────────────
-  // GESTURE HOOK: ingest(handLandmarks) should be called each frame with live
-  // hand landmark data. Install @mediapipe/hands and add a useHands(videoRef)
-  // hook here, then call ingest(landmarks) in a useEffect each frame.
+  // ── Gesture + hand tracking ───────────────────────────────────────────────
   const { ingest } = useHandGestures({
-    onFist:  () => { if (appStateRef.current === 'camera') void handleSnap() },
+    onFist:  () => { if (appStateRef.current === 'camera') startCountdown() },
     onLeft:  () => { if (appStateRef.current === 'result') handleDiscard() },
     onRight: () => { if (appStateRef.current === 'result') void handleSave() },
     mirrorX: true,
   })
 
-  // Expose ingest so hand-tracking integration can feed landmarks in:
-  // e.g.  const { landmarks } = useHands(videoRef)
-  //       useEffect(() => ingest(landmarks), [landmarks])
-  void ingest  // suppress unused warning until hand tracking is wired
+  const handleLandmarks = useCallback((lms: { x: number; y: number; z: number }[] | null) => {
+    ingest(lms)
+
+    const canvas = skeletonRef.current
+    if (!canvas) return
+
+    // Size canvas to CSS layout so normalized coords map to visible pixels
+    if (canvas.width !== canvas.offsetWidth)   canvas.width  = canvas.offsetWidth
+    if (canvas.height !== canvas.offsetHeight) canvas.height = canvas.offsetHeight
+
+    const ctx = canvas.getContext('2d')!
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    if (!lms || appStateRef.current !== 'camera') return
+
+    const W = canvas.width
+    const H = canvas.height
+    const CONN: [number, number][] = [
+      [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+      [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
+      [13,17],[17,18],[18,19],[19,20],[0,17],
+    ]
+    const TIPS = new Set([0, 4, 8, 12, 16, 20])
+
+    ctx.strokeStyle = '#8b5cf6'
+    ctx.lineWidth = 3
+    for (const [a, b] of CONN) {
+      ctx.beginPath()
+      ctx.moveTo(lms[a].x * W, lms[a].y * H)
+      ctx.lineTo(lms[b].x * W, lms[b].y * H)
+      ctx.stroke()
+    }
+    for (let i = 0; i < lms.length; i++) {
+      ctx.beginPath()
+      ctx.arc(lms[i].x * W, lms[i].y * H, i === 0 ? 7 : TIPS.has(i) ? 5 : 3, 0, Math.PI * 2)
+      ctx.fillStyle = i === 0 ? '#22c55e' : TIPS.has(i) ? '#f59e0b' : '#e5e7eb'
+      ctx.fill()
+    }
+  }, [ingest])
+
+  useHands(videoRef, handleLandmarks)
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -229,16 +289,26 @@ export function TryOnModal({
         </div>
       )}
 
+      {/* Skeleton overlay — only during camera state */}
+      {appState === 'camera' && (
+        <canvas
+          ref={skeletonRef}
+          className="absolute inset-0 z-10 h-full w-full"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
+
       {appState === 'camera' && !cameraError && (
         <TryOnCamera
           garmentItem={outfit ? primaryGarment(outfit.items) : null}
-          onSnap={() => void handleSnap()}
+          onSnap={startCountdown}
+          countdown={countdown}
           disabled={!cameraReady}
         />
       )}
 
       {appState === 'loading' && snapshotDataUrl && (
-        <TryOnLoader snapshotDataUrl={snapshotDataUrl} />
+        <TryOnLoader snapshotDataUrl={snapshotDataUrl} step={loadingStep ?? undefined} />
       )}
 
       {appState === 'result' && resultUrl && (

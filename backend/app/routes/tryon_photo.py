@@ -1,13 +1,11 @@
 import base64
 import os
-import re
 from datetime import datetime, timezone
 
 import requests
 from flask import Blueprint, jsonify, request
 
 from app.auth0_jwt import require_auth
-from app.services.cloudinary_upload import upload_image_bytes
 
 
 tryon_photo_bp = Blueprint("tryon_photo", __name__)
@@ -27,10 +25,9 @@ def _b64_image_to_bytes(data_url_or_b64: str) -> bytes | None:
     if not s:
         return None
     if s.startswith("data:"):
-        m = re.match(r"^data:image/\\w+;base64,(.+)$", s)
-        if not m:
+        if "base64," not in s:
             return None
-        s = m.group(1)
+        s = s.split("base64,", 1)[1]
     try:
         return base64.b64decode(s, validate=True)
     except Exception:
@@ -97,136 +94,41 @@ def _fashn_run_tryon(*, model_image: str, garment_image: str, api_key: str) -> s
 @require_auth
 def tryon_photo():
     """
-    Deepfake-style photo try-on (provider-backed).
+    Single-step try-on. Frontend chains calls for multi-garment outfits.
 
     Request JSON:
-      - image_base64: data URL or raw base64 (camera frame)
-      - items: [{ id, category, try_on_asset?, image_url? }]
-      - outfit_name?: string
+      - image_base64: base64/data-URL of the person image (first call)
+      - model_image_url: public URL of person image (subsequent calls, pass previous result_image_url)
+      - garment_src: base64/data-URL or public URL of the garment
 
     Response:
-      - result_image_url: string (Cloudinary)
+      - result_image_url: Fashn CDN URL of the composited result
     """
     body = request.get_json(silent=True) or {}
-    img_b64 = (body.get("image_base64") or "").strip()
-    items = body.get("items") or []
-    if not img_b64:
-        return jsonify({"detail": "missing image_base64"}), 400
-    if not isinstance(items, list) or not items:
-        return jsonify({"detail": "missing items"}), 400
 
-    frame_bytes = _b64_image_to_bytes(img_b64)
-    if not frame_bytes:
+    # Person image — either base64 (first call) or URL (chained calls)
+    img_b64     = (body.get("image_base64") or "").strip()
+    model_url   = (body.get("model_image_url") or "").strip()
+    garment_src = (body.get("garment_src") or "").strip()
+
+    if not img_b64 and not model_url:
+        return jsonify({"detail": "missing image_base64 or model_image_url"}), 400
+    if not garment_src:
+        return jsonify({"detail": "missing garment_src"}), 400
+
+    # Validate base64 if provided
+    if img_b64 and not _b64_image_to_bytes(img_b64):
         return jsonify({"detail": "invalid image_base64"}), 400
 
-    garment_urls: list[str] = []
-    for it in items[:8]:
-        if not isinstance(it, dict):
-            continue
-        url = (it.get("try_on_asset") or it.get("image_url") or "").strip()
-        if url:
-            garment_urls.append(url)
-    if not garment_urls:
-        return jsonify({"detail": "items have no usable image_url/try_on_asset"}), 400
-
-    # Use FASHN if configured. (No local GPU required; this is provider-backed.)
     fashn_key = os.environ.get("FASHN_API_KEY", "").strip()
+    if not fashn_key:
+        return jsonify({"detail": "FASHN_API_KEY is not configured"}), 400
 
-    out_bytes: bytes | None = None
-    if fashn_key:
-        # FASHN accepts base64, but in practice it's picky about prefixes/encodings.
-        # Upload the camera frame to Cloudinary first and pass a normal URL.
-        ts_in = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        try:
-            model_url = upload_image_bytes(
-                file_bytes=frame_bytes,
-                public_id=f"tryon_input_{ts_in}",
-                folder="fitdeck/tryon-input",
-            )
-        except Exception as e:
-            return jsonify({"detail": str(e) or "cloudinary_upload_failed"}), 400
-
-        # FASHN try-on supports one garment image per run.
-        # For multi-item outfits, apply sequentially in a deterministic order.
-        # This is a pragmatic MVP (shirt -> jacket -> pants -> shoes).
-        order = {"shirt": 0, "jacket": 1, "pants": 2, "shoes": 3, "accessory": 4}
-        ordered = []
-        for it in items:
-            if not isinstance(it, dict):
-                continue
-            url = (it.get("try_on_asset") or it.get("image_url") or "").strip()
-            cat = (it.get("category") or "").strip()
-            if url:
-                ordered.append((order.get(cat, 99), url))
-        ordered.sort(key=lambda x: x[0])
-        garment_ordered_urls = [u for _, u in ordered][:4] or garment_urls[:1]
-
-        model_image = model_url
-        try:
-            last_url = ""
-            for gu in garment_ordered_urls:
-                last_url = _fashn_run_tryon(model_image=model_image, garment_image=gu, api_key=fashn_key)
-                model_image = last_url
-        except Exception as e:
-            return jsonify({"detail": str(e) or "fashn_error"}), 400
-
-        rr = requests.get(last_url, timeout=60)
-        if rr.status_code < 400:
-            out_bytes = rr.content
-    else:
-        # Fallback: generic provider (optional).
-        provider_url = os.environ.get("TRYON_DEEPFAKE_API_URL", "").strip()
-        provider_key = os.environ.get("TRYON_DEEPFAKE_API_KEY", "").strip()
-        if not provider_url or not provider_key:
-            return (
-                jsonify(
-                    {
-                        "detail": "Deepfake try-on is not configured. Set FASHN_API_KEY or TRYON_DEEPFAKE_API_URL/TRYON_DEEPFAKE_API_KEY on the backend.",
-                    }
-                ),
-                400,
-            )
-
-        r = requests.post(
-            provider_url,
-            headers={
-                "Authorization": f"Bearer {provider_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "person_image_base64": img_b64,
-                "garment_image_urls": garment_urls,
-            },
-            timeout=120,
-        )
-        if r.status_code >= 400:
-            snippet = (r.text or "").strip()[:800] or str(r.status_code)
-            return jsonify({"detail": "tryon_provider_error", "provider_detail": snippet}), 400
-
-        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        result_url = (data.get("result_image_url") or "").strip() if isinstance(data, dict) else ""
-        result_b64 = (data.get("result_image_base64") or "").strip() if isinstance(data, dict) else ""
-
-        if result_b64:
-            out_bytes = _b64_image_to_bytes(result_b64)
-        elif result_url:
-            rr = requests.get(result_url, timeout=60)
-            if rr.status_code < 400:
-                out_bytes = rr.content
-
-    if not out_bytes:
-        return jsonify({"detail": "provider returned no result image"}), 400
-
-    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    public_id = f"tryon_{ts}"
+    model_image = img_b64 if img_b64 else model_url
     try:
-        uploaded = upload_image_bytes(
-            file_bytes=out_bytes,
-            public_id=public_id,
-            folder="fitdeck/tryon",
-        )
+        result_url = _fashn_run_tryon(model_image=model_image, garment_image=garment_src, api_key=fashn_key)
     except Exception as e:
-        return jsonify({"detail": str(e) or "cloudinary_upload_failed"}), 400
+        return jsonify({"detail": str(e) or "fashn_error"}), 400
 
-    return {"result_image_url": uploaded}
+    return {"result_image_url": result_url}
 
