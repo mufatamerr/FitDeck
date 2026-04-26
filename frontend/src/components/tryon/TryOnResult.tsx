@@ -25,26 +25,26 @@ export function TryOnResult({ resultUrl, onSave, onDiscard, onRetake }: Props) {
         ← Retake
       </button>
 
+      {/* Gesture hint */}
+      <p className="pb-1 text-center text-xs text-zinc-500 tracking-widest">
+        ← swipe to discard &nbsp;·&nbsp; swipe to save →
+      </p>
+
       {/* Save / Discard */}
       <div className="flex items-center gap-3 p-5 pb-8">
-        {/*
-         * GESTURE HOOK: Swipe left = Save (onSave()), Swipe right = Discard (onDiscard())
-         * Partner is implementing swipe gesture detection separately.
-         * Wire gestures to these two handlers.
-         */}
         <button
           type="button"
           onClick={onSave}
           className="flex-1 rounded-2xl bg-violet-600 py-4 text-sm font-semibold text-white active:bg-violet-700"
         >
-          💾 Save Outfit
+          Save to Closet
         </button>
         <button
           type="button"
           onClick={onDiscard}
           className="flex-1 rounded-2xl border border-zinc-700 py-4 text-sm font-medium text-zinc-300 active:bg-zinc-800"
         >
-          ✕ Discard
+          Discard
         </button>
       </div>
     </div>

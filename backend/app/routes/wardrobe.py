@@ -46,6 +46,18 @@ def list_wardrobe():
     }
 
 
+@wardrobe_bp.delete("/<item_id>")
+@require_auth
+def delete_item(item_id: str):
+    owner_id = g.jwt_claims.get("sub")
+    item = ClothingItem.query.filter_by(id=item_id, owner_id=owner_id, source="personal").first()
+    if not item:
+        return {"error": "not_found"}, 404
+    item.is_active = False
+    db.session.commit()
+    return {"ok": True}
+
+
 @wardrobe_bp.get("/media/<path:filename>")
 def media(filename: str):
     return send_from_directory(UPLOADS_DIR, filename)

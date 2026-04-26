@@ -134,3 +134,16 @@ def save_outfit():
     db.session.commit()
     return {"ok": True}
 
+
+@outfits_bp.delete("/<outfit_id>")
+@require_auth
+def delete_outfit(outfit_id: str):
+    owner_id = g.jwt_claims.get("sub")
+    outfit = Outfit.query.filter_by(id=outfit_id, owner_id=owner_id).first()
+    if not outfit:
+        return {"error": "not_found"}, 404
+    OutfitItem.query.filter_by(outfit_id=outfit_id).delete()
+    db.session.delete(outfit)
+    db.session.commit()
+    return {"ok": True}
+

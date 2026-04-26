@@ -34,7 +34,7 @@ export function TryOnLoader({ snapshotDataUrl, step }: Props) {
             ))}
           </div>
         )}
-        <p className="mt-3 text-sm text-zinc-400">~15–30 s per garment</p>
+        <p className="mt-3 text-sm text-zinc-400">around 15–30s per garment</p>
       </div>
     </div>
   )
