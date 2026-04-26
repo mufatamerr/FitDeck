@@ -263,7 +263,7 @@ export function BuilderPage() {
                 )}
                 {outfitComplete && (
                   <p style={{ fontSize: 9.5, color: muted, textAlign: 'center', marginTop: 6, letterSpacing: '0.04em', lineHeight: 1.7 }}>
-                    Swipe right in try-on to save to your closet
+                    Save the generated look in try-on to add it to your closet
                   </p>
                 )}
               </div>

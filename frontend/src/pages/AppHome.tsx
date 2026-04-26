@@ -115,7 +115,7 @@ export function AppHome() {
       if (!res.ok) return
       const data = (await res.json()) as SyncData
       setSync(data)
-      if (data.role === 'admin') navigate('/admin-dashboard', { replace: true })
+      if (data.role === 'admin') navigate('/admin', { replace: true })
     } catch {
       /* non-critical */
     }

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 
 from app.db import init_db
@@ -59,6 +59,12 @@ def create_app():
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "fitdeck-api"}
+
+    _uploads_dir = Path(__file__).resolve().parent.parent / "uploads"
+
+    @app.get("/uploads/<path:filename>")
+    def serve_upload(filename: str):
+        return send_from_directory(_uploads_dir, filename)
 
     @app.get("/health/bootstrap")
     def health_bootstrap():

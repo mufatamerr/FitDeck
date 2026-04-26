@@ -8,10 +8,20 @@ export class ApiClient {
     ) => Promise<string>,
   ) {}
 
+  private async _getToken(audience?: string): Promise<string> {
+    try {
+      return await this.getAccessTokenSilently(
+        audience ? { authorizationParams: { audience } } : undefined,
+      )
+    } catch {
+      const devToken = sessionStorage.getItem('admin_token')
+      if (devToken) return devToken
+      throw new Error('Not authenticated')
+    }
+  }
+
   async fetchJson<T>(path: string, init: RequestInit = {}, audience?: string): Promise<T> {
-    const token = await this.getAccessTokenSilently(
-      audience ? { authorizationParams: { audience } } : undefined,
-    )
+    const token = await this._getToken(audience)
 
     const res = await fetch(`${this.baseUrl}${path}`, {
       ...init,
@@ -31,9 +41,7 @@ export class ApiClient {
   }
 
   async postFormData<T>(path: string, form: FormData, audience?: string): Promise<T> {
-    const token = await this.getAccessTokenSilently(
-      audience ? { authorizationParams: { audience } } : undefined,
-    )
+    const token = await this._getToken(audience)
 
     const res = await fetch(`${this.baseUrl}${path}`, {
       method: 'POST',

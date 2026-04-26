@@ -43,6 +43,9 @@ function AdminRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isConfigured, isLoading, getAccessTokenSilently } = useFitAuth()
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
 
+  // Dev-admin session token always grants access immediately
+  if (sessionStorage.getItem('admin_token')) return <>{children}</>
+
   useEffect(() => {
     if (!isAuthenticated || !isConfigured) return
     const check = async () => {
@@ -64,8 +67,8 @@ function AdminRoute({ children }: { children: ReactNode }) {
     return <div className="flex min-h-dvh items-center justify-center text-zinc-400">Loading…</div>
   }
   if (!isConfigured) return <>{children}</>
-  if (!isAuthenticated) return <Navigate to="/" replace />
-  if (!isAdmin) return <Navigate to="/app" replace />
+  if (!isAuthenticated) return <Navigate to="/admin-login" replace />
+  if (!isAdmin) return <Navigate to="/admin-login" replace />
   return <>{children}</>
 }
 
